@@ -250,6 +250,7 @@ window.__ModuleLoader__.load({
         if (typeof item.status === 'string' && STATUS_SET.has(item.status)) extra.status = item.status;
         if (typeof item.owner === 'string' && item.owner.trim()) extra.owner = item.owner.trim();
         if (item.isSection === true) extra.isSection = true;
+        if (Number.isFinite(Number(item.line)) && Number(item.line) > 0) extra.line = Number(item.line);
         if (Array.isArray(item.refs)) {
           const refs = item.refs
             .filter((r) => typeof r === 'string' && r.trim())

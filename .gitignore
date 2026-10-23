@@ -25,5 +25,9 @@ pnpm-debug.log*
 coverage/
 .vitest/
 
+# Generated lint output
+treelog.sarif
+junit.xml
+
 # TypeScript incremental build info
 *.tsbuildinfo

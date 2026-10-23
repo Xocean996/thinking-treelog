@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/thinking-treelog/thinking-treelog/main/treelog.schema.json",
+  "title": "Thinking TreeLog configuration",
+  "description": "Configuration for the treelog CLI. Discovered as treelog.config.json or .treelogrc.json, walking up from the working directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "preset": {
+      "description": "Rule posture. Explicit `rules` always override it.",
+      "enum": ["recommended", "strict", "relaxed"],
+      "default": "recommended"
+    },
+    "locale": {
+      "description": "Message language.",
+      "enum": ["en", "zh"],
+      "default": "en"
+    },
+    "maxDepth": {
+      "description": "Maximum allowed decision-chain depth.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 8
+    },
+    "minConclusionConfidence": {
+      "description": "Conclusions below this confidence are reported.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    },
+    "ignore": {
+      "description": "Glob patterns (relative to the config file) to skip entirely.",
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "baseline": {
+      "description": "Path to a baseline file of accepted findings.",
+      "type": ["string", "null"],
+      "default": null
+    },
+    "failOn": {
+      "description": "Severity that fails the build.",
+      "enum": ["error", "warning", "never"],
+      "default": "error"
+    },
+    "rules": {
+      "description": "Per-rule override. Use a severity to re-level, false/\"off\" to disable, true to enable an opt-in rule.",
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "conclusion-without-evidence",
+          "assumption-unverified",
+          "rejected-with-descendants",
+          "superseded-without-reference",
+          "low-confidence-conclusion",
+          "depth-exceeds",
+          "orphan-node",
+          "unresolved-question",
+          "evidence-without-source"
+        ]
+      },
+      "additionalProperties": {
+        "oneOf": [
+          { "enum": ["error", "warning", "info", "off"] },
+          { "type": "boolean" }
+        ]
+      },
+      "default": {}
+    }
+  }
+}

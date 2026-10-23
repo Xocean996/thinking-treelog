@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { buildGraph, normalizeNodes } from '../packages/core/src/index.js';
 import {
   diffTrees,
+  fingerprint,
   lintTree,
   parseMarkdown,
   summarizeFindings,
@@ -11,11 +12,19 @@ import {
   toSarif,
 } from '../packages/core/src/engineering.js';
 import {
+  DEFAULT_CONFIG,
+  baselineDocument,
   diffPaths,
   exportTree,
+  isIgnored,
   lintPaths,
+  loadBaseline,
+  loadConfig,
   loadTree,
+  parseSuppressions,
   renderAsciiTree,
+  toGithubAnnotations,
+  toJunit,
 } from '../packages/cli/lib/commands.mjs';
 
 const ADR = `# ADR-0007 采用插件形态
@@ -207,7 +216,7 @@ test('exportTree renders every supported format', async () => {
   const stats = JSON.parse(await exportTree('a.md', { readFile: io.readFile, format: 'stats' }));
   assert.ok(stats.nodeCount > 0);
 
-  await assert.rejects(() => exportTree('a.md', { readFile: io.readFile, format: 'nope' }), /未知导出格式/);
+  await assert.rejects(() => exportTree('a.md', { readFile: io.readFile, format: 'nope' }), /unknown export format/i);
 });
 
 test('diffPaths renders a readable summary', async () => {
@@ -237,4 +246,157 @@ test('summarizeFindings counts by severity', () => {
     { severity: 'info' },
   ]);
   assert.deepEqual(summary, { error: 1, warning: 2, info: 1 });
+});
+
+/* ------------------------------------------------------------------ *
+ * Enterprise plumbing: config, ignore, suppression, baseline, formats
+ * ------------------------------------------------------------------ */
+
+test('parseMarkdown records 1-based source lines', () => {
+  const nodes = parseMarkdown('# Title\n\n- first\n- second\n');
+  const first = nodes.find((n) => n.text === 'first');
+  const second = nodes.find((n) => n.text === 'second');
+  assert.equal(first.line, 3);
+  assert.equal(second.line, 4);
+});
+
+test('SARIF points at the node line, not line 1', () => {
+  const findings = lintTree(parseMarkdown('# T\n\n决定：直接上线。\n'));
+  const sarif = toSarif(findings, { file: 'docs/a.md' });
+  const line = sarif.runs[0].results[0].locations[0].physicalLocation.region.startLine;
+  assert.equal(line, 3);
+});
+
+test('loadConfig expands presets and lets explicit rules win', async () => {
+  const config = await loadConfig({
+    cwd: process.cwd(),
+    configPath: 'treelog.config.json',
+    exists: () => true,
+    readFile: async () =>
+      JSON.stringify({
+        preset: 'strict',
+        rules: { 'depth-exceeds': 'info', 'claim-unsupported': false },
+        ignore: ['docs/archive/**'],
+        locale: 'zh',
+      }),
+  });
+
+  assert.equal(config.preset, 'strict');
+  assert.equal(config.locale, 'zh');
+  assert.equal(config.rules['unresolved-question'], true, 'preset should enable it');
+  assert.equal(config.rules['depth-exceeds'], 'info', 'explicit rule should win');
+  assert.equal(config.rules['claim-unsupported'], false);
+  assert.deepEqual(config.ignore, ['docs/archive/**']);
+});
+
+test('loadConfig falls back to defaults when no file exists', async () => {
+  const config = await loadConfig({
+    cwd: process.cwd(),
+    configPath: null,
+    exists: () => false,
+    readFile: async () => '{}',
+  });
+  assert.equal(config.preset, DEFAULT_CONFIG.preset);
+  assert.equal(config.maxDepth, DEFAULT_CONFIG.maxDepth);
+});
+
+test('loadConfig rejects malformed JSON with a useful message', async () => {
+  await assert.rejects(
+    () =>
+      loadConfig({
+        cwd: process.cwd(),
+        configPath: 'bad.json',
+        exists: () => true,
+        readFile: async () => '{ not json',
+      }),
+    /not valid JSON|不是合法 JSON/i,
+  );
+});
+
+test('ignore patterns match nested paths', () => {
+  assert.equal(isIgnored('docs/archive/old.md', ['docs/archive/**']), true);
+  assert.equal(isIgnored('docs/archive/deep/old.md', ['docs/archive/**']), true);
+  assert.equal(isIgnored('docs/live/current.md', ['docs/archive/**']), false);
+  assert.equal(isIgnored('a/b/c.md', ['**/c.md']), true);
+});
+
+test('suppression comments work at file and rule scope', () => {
+  assert.deepEqual(parseSuppressions('<!-- treelog-ignore -->'), { all: true, rules: new Set() });
+
+  const scoped = parseSuppressions('<!-- treelog-ignore a-rule, b-rule -->');
+  assert.equal(scoped.all, false);
+  assert.deepEqual([...scoped.rules], ['a-rule', 'b-rule']);
+
+  assert.deepEqual(parseSuppressions('no comment here'), { all: false, rules: new Set() });
+});
+
+test('lintPaths honours rule-scoped suppressions', async () => {
+  const io = {
+    readFile: async () =>
+      '<!-- treelog-ignore conclusion-without-evidence -->\n# T\n\n决定：直接上线。\n',
+  };
+  const result = await lintPaths(['s.md'], { readFile: io.readFile });
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.exitCode, 0);
+});
+
+test('lintPaths honours ignore patterns', async () => {
+  const io = { readFile: async () => '# T\n\n决定：直接上线。\n' };
+  const result = await lintPaths(['docs/archive/old.md'], {
+    readFile: io.readFile,
+    config: { ignore: ['docs/archive/**'] },
+  });
+  assert.equal(result.findings.length, 0);
+});
+
+test('baseline round-trip suppresses known findings and unblocks the build', async () => {
+  const io = { readFile: async () => '# T\n\n决定：直接上线。\n' };
+
+  const first = await lintPaths(['bad.md'], { readFile: io.readFile });
+  assert.ok(first.findings.length > 0);
+  assert.equal(first.exitCode, 1);
+
+  const doc = baselineDocument(first.allFindings);
+  const parsed = JSON.parse(doc);
+  assert.ok(parsed.fingerprints.includes(fingerprint(first.allFindings[0])));
+
+  const baseline = await loadBaseline('baseline.json', { readFile: async () => doc });
+  const second = await lintPaths(['bad.md'], { readFile: io.readFile, baseline });
+
+  assert.equal(second.findings.length, 0);
+  assert.equal(second.suppressed, first.findings.length);
+  assert.equal(second.exitCode, 0);
+});
+
+test('loadBaseline tolerates a missing file', async () => {
+  const baseline = await loadBaseline('nope.json', {
+    readFile: async () => {
+      throw new Error('ENOENT');
+    },
+  });
+  assert.equal(baseline.size, 0);
+});
+
+test('JUnit output is well-formed enough for CI parsers', () => {
+  const xml = toJunit([
+    { rule: 'r', severity: 'error', message: 'boom <&>', nodeLabel: 'L', file: 'a.md', line: 3 },
+  ]);
+  assert.match(xml, /^<\?xml version="1.0"/);
+  assert.match(xml, /<testsuite name="treelog" tests="1" failures="1">/);
+  assert.match(xml, /boom &lt;&amp;&gt;/);
+});
+
+test('GitHub annotations use the workflow command format', () => {
+  const text = toGithubAnnotations([
+    { rule: 'conclusion-without-evidence', severity: 'error', message: 'no evidence', file: 'a.md', line: 7 },
+  ]);
+  assert.equal(text, '::error file=a.md,line=7,title=conclusion-without-evidence::no evidence');
+});
+
+test('localised lint messages switch with locale', () => {
+  const nodes = parseMarkdown('# T\n\n决定：直接上线。\n');
+  const en = lintTree(nodes, { locale: 'en' })[0].message;
+  const zh = lintTree(nodes, { locale: 'zh' })[0].message;
+  assert.match(en, /has no supporting evidence/);
+  assert.match(zh, /没有任何论据节点/);
 });

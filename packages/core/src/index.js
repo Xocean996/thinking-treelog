@@ -258,6 +258,9 @@ export function normalizeNodes(raw) {
     if (record.isSection === true) {
       extra.isSection = true;
     }
+    if (Number.isFinite(Number(record.line)) && Number(record.line) > 0) {
+      extra.line = Number(record.line);
+    }
     if (Array.isArray(record.refs)) {
       const refs = record.refs
         .filter((r) => typeof r === 'string' && r.trim())

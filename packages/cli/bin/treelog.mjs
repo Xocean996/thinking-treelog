@@ -12,9 +12,12 @@ import { fileURLToPath } from 'node:url';
 
 import {
   EXIT_CODES,
+  baselineDocument,
   diffPaths,
   exportTree,
   lintPaths,
+  loadBaseline,
+  loadConfig,
   loadTree,
   renderAsciiTree,
 } from '../lib/commands.mjs';
@@ -24,34 +27,45 @@ const pkg = JSON.parse(readFileSync(resolve(here, '../package.json'), 'utf8'));
 
 const USAGE = `treelog ${pkg.version} — thought-tree lint for design docs
 
-用法:
-  treelog lint <文件...> [选项]        检查推理缺口（可进 CI）
-  treelog tree <文件>                  以 ASCII 形式打印思维树
-  treelog export <文件> [选项]         导出 md / mermaid / adr / json / stats
-  treelog diff <旧文件> <新文件>       对比两版决策结构
+Usage:
+  treelog lint <files...> [options]     Check documents for reasoning gaps (CI-ready)
+  treelog tree <file>                   Print the thought tree as ASCII
+  treelog export <file> [options]       Export md | mermaid | adr | json | stats
+  treelog diff <before> <after>         Compare two revisions of a decision
 
-选项:
-  --format <fmt>     lint: text|json|sarif（默认 text）
-                     export: md|mermaid|adr|json|stats（默认 md）
-                     diff: text|json（默认 text）
-  --max-depth <n>    lint 允许的最大决策链深度（默认 8）
-  --min-confidence   lint 结论最低置信度（默认 0.5）
-  --fail-on <level>  error（默认）| warning | never
-  -o, --out <file>   写入文件而不是 stdout
-  -h, --help         显示帮助
-  -v, --version      显示版本
+Options:
+  --format <fmt>      lint: text | json | sarif | github | junit   (default text)
+                      export: md | mermaid | adr | json | stats    (default md)
+                      diff: text | json                             (default text)
+  --lang <en|zh>      Message language (default: config, else en)
+  --config <file>     Config file (default: nearest treelog.config.json)
+  --preset <name>     recommended | strict | relaxed
+  --baseline <file>   Ignore findings recorded in this baseline file
+  --baseline-write    Accept everything now and write a baseline file
+  --max-depth <n>     Maximum decision-chain depth (default 8)
+  --min-confidence    Minimum confidence for conclusions (default 0.5)
+  --fail-on <level>   error (default) | warning | never
+  -o, --out <file>    Write to a file instead of stdout
+  -h, --help          Show this help
+  -v, --version       Show the version
 
-文件类型:
-  .md/.markdown  按标题与列表解析成树
-  .json          读取已有的树（{nodes} 或节点数组）
-  其他 / -       按自然语言句子提取（- 表示 stdin）
+File types:
+  .md/.markdown  parsed by headings and lists (ADR-aware)
+  .json          an existing tree ({nodes} or a node array)
+  other / -      natural-language sentences (- reads stdin)
 
-退出码:
-  0 没有 error   1 发现 error   2 用法错误
+Suppress in a document:
+  <!-- treelog-ignore -->                        silence this whole file
+  <!-- treelog-ignore conclusion-without-evidence -->   silence one rule
 
-示例:
+Exit codes:
+  0 no errors   1 errors found   2 usage error
+
+Examples:
   treelog lint docs/adr/*.md --format sarif -o treelog.sarif
   treelog lint design.md --fail-on warning
+  treelog lint docs/**/*.md --baseline .treelog-baseline.json
+  treelog lint docs/ --baseline-write
   treelog export design.md --format adr
   treelog diff design.v1.md design.v2.md
 `;
@@ -111,20 +125,39 @@ async function main() {
 
   if (command === 'lint') {
     if (!files.length) {
-      process.stderr.write('treelog lint 需要至少一个文件\n');
+      process.stderr.write('treelog lint needs at least one file\n');
       return EXIT_CODES.usage;
     }
     for (const file of files) {
-      if (file !== '-' && !existsSync(file)) {
-        process.stderr.write(`文件不存在：${file}\n`);
+      if (file !== '-' && !existsSync(file) && !file.includes('*')) {
+        process.stderr.write(`file not found: ${file}\n`);
         return EXIT_CODES.usage;
       }
     }
 
+    const config = await loadConfig({
+      cwd: process.cwd(),
+      configPath: typeof flags.config === 'string' ? flags.config : undefined,
+    });
+    if (typeof flags.preset === 'string') {
+      // Re-expand the preset while keeping explicit rule overrides.
+      const { PRESETS } = await import('@thinking-treelog/core/engineering');
+      config.rules = { ...(PRESETS[flags.preset] ?? {}), ...(config.rules ?? {}) };
+    }
+
+    const baselinePath =
+      (typeof flags.baseline === 'string' ? flags.baseline : null) ?? config.baseline;
+    const writingBaseline = flags.baselineWrite === true;
+    const baseline =
+      baselinePath && !writingBaseline ? await loadBaseline(baselinePath) : new Set();
+
     const result = await lintPaths(files, {
       format: typeof flags.format === 'string' ? flags.format : 'text',
+      config,
+      locale: typeof flags.lang === 'string' ? flags.lang : config.locale,
       maxDepth: flags.maxDepth ? Number(flags.maxDepth) : undefined,
       minConclusionConfidence: flags.minConfidence ? Number(flags.minConfidence) : undefined,
+      baseline,
       color: process.stdout.isTTY === true,
       version: pkg.version,
     });
@@ -132,7 +165,16 @@ async function main() {
     if (flags.out) await writeFile(flags.out, result.text, 'utf8');
     else process.stdout.write(`${result.text}\n`);
 
-    const failOn = typeof flags.failOn === 'string' ? flags.failOn : 'error';
+    if (writingBaseline) {
+      const target = baselinePath ?? '.treelog-baseline.json';
+      await writeFile(target, baselineDocument(result.allFindings), 'utf8');
+      process.stderr.write(
+        `treelog: wrote baseline with ${result.allFindings.length} finding(s) to ${target}\n`,
+      );
+      return EXIT_CODES.ok;
+    }
+
+    const failOn = typeof flags.failOn === 'string' ? flags.failOn : config.failOn ?? 'error';
     if (failOn === 'never') return EXIT_CODES.ok;
     if (failOn === 'warning') {
       return result.summary.error + result.summary.warning > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;
@@ -142,11 +184,11 @@ async function main() {
 
   if (command === 'tree') {
     if (!files.length) {
-      process.stderr.write('treelog tree 需要一个文件\n');
+      process.stderr.write('treelog tree needs a file\n');
       return EXIT_CODES.usage;
     }
     const tree = await loadTree(files[0]);
-    const text = `${tree.title}\n${renderAsciiTree(tree.nodes)}\n\n${tree.nodes.length} 个节点`;
+    const text = `${tree.title}\n${renderAsciiTree(tree.nodes)}\n\n${tree.nodes.length} node(s)`;
     if (flags.out) await writeFile(flags.out, text, 'utf8');
     else process.stdout.write(`${text}\n`);
     return EXIT_CODES.ok;
@@ -154,7 +196,7 @@ async function main() {
 
   if (command === 'export') {
     if (!files.length) {
-      process.stderr.write('treelog export 需要一个文件\n');
+      process.stderr.write('treelog export needs a file\n');
       return EXIT_CODES.usage;
     }
     const text = await exportTree(files[0], {
@@ -171,7 +213,7 @@ async function main() {
 
   if (command === 'diff') {
     if (files.length < 2) {
-      process.stderr.write('treelog diff 需要两个文件\n');
+      process.stderr.write('treelog diff needs two files\n');
       return EXIT_CODES.usage;
     }
     const result = await diffPaths(files[0], files[1], {
@@ -182,7 +224,7 @@ async function main() {
     return EXIT_CODES.ok;
   }
 
-  process.stderr.write(`未知命令：${command}\n\n${USAGE}`);
+  process.stderr.write(`unknown command: ${command}\n\n${USAGE}`);
   return EXIT_CODES.usage;
 }
 

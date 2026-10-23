@@ -11,7 +11,7 @@ inputs:
     required: false
     default: docs/**/*.md
   format:
-    description: Output format — text or sarif.
+    description: Output format — text, sarif, github, junit or json.
     required: false
     default: text
   fail-on:
@@ -22,6 +22,23 @@ inputs:
     description: Maximum allowed decision-chain depth.
     required: false
     default: '8'
+  baseline:
+    description: Path to a baseline file of accepted findings. Empty means none.
+    required: false
+    default: ''
+  config:
+    description: Path to a treelog config file. Empty means nearest treelog.config.json.
+    required: false
+    default: ''
+  lang:
+    description: Message language — en or zh.
+    required: false
+    default: en
+
+outputs:
+  sarif:
+    description: Path to the SARIF file when format is sarif.
+    value: ${{ steps.lint.outputs.sarif }}
 
 runs:
   using: composite
@@ -32,6 +49,7 @@ runs:
       run: npm install --no-audit --no-fund --ignore-scripts
 
     - name: Lint thought trees
+      id: lint
       shell: bash
       run: |
         shopt -s globstar nullglob
@@ -40,8 +58,24 @@ runs:
           echo "treelog: no files matched '${{ inputs.files }}' — nothing to lint"
           exit 0
         fi
-        node "${{ github.action_path }}/packages/cli/bin/treelog.mjs" \
-          lint "${files[@]}" \
-          --format "${{ inputs.format }}" \
-          --fail-on "${{ inputs.fail-on }}" \
-          --max-depth "${{ inputs.max-depth }}"
+
+        args=( lint "${files[@]}" )
+        args+=( --format "${{ inputs.format }}" )
+        args+=( --fail-on "${{ inputs.fail-on }}" )
+        args+=( --max-depth "${{ inputs.max-depth }}" )
+        args+=( --lang "${{ inputs.lang }}" )
+
+        if [ -n "${{ inputs.baseline }}" ]; then
+          args+=( --baseline "${{ inputs.baseline }}" )
+        fi
+        if [ -n "${{ inputs.config }}" ]; then
+          args+=( --config "${{ inputs.config }}" )
+        fi
+
+        if [ "${{ inputs.format }}" = "sarif" ]; then
+          args+=( --out treelog.sarif )
+          node "${{ github.action_path }}/packages/cli/bin/treelog.mjs" "${args[@]}"
+          echo "sarif=treelog.sarif" >> "$GITHUB_OUTPUT"
+        else
+          node "${{ github.action_path }}/packages/cli/bin/treelog.mjs" "${args[@]}"
+        fi

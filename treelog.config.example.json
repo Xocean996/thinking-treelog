@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/thinking-treelog/thinking-treelog/main/treelog.schema.json",
+  "preset": "recommended",
+  "locale": "en",
+  "maxDepth": 8,
+  "minConclusionConfidence": 0.5,
+  "ignore": ["docs/archive/**", "**/CHANGELOG.md"],
+  "baseline": ".treelog-baseline.json",
+  "failOn": "error",
+  "rules": {
+    "assumption-unverified": "warning",
+    "evidence-without-source": "off",
+    "depth-exceeds": "info"
+  }
+}

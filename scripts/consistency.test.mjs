@@ -137,9 +137,14 @@ test('client and core agree on Markdown and Mermaid exports', () => {
 });
 
 test('client and core agree on reasoning lint findings', () => {
+  // The panel renders Chinese; core defaults to English. Compare in the same locale.
   for (const fixture of FIXTURES.slice(0, 3)) {
     const nodes = extractWithRules(fixture);
-    assert.deepEqual(internals.lintTree(nodes), lintTree(nodes), 'lint findings diverged');
+    assert.deepEqual(
+      internals.lintTree(nodes),
+      lintTree(nodes, { locale: 'zh' }),
+      'lint findings diverged',
+    );
   }
 
   // Also cover the engineering metadata that only the panel can set.
@@ -148,5 +153,5 @@ test('client and core agree on reasoning lint findings', () => {
     { id: 'b', parentId: 'a', text: '旧方案 B', type: 'claim', status: 'rejected' },
     { id: 'c', parentId: 'b', text: '旧方案 B 的细节', type: 'claim' },
   ]);
-  assert.deepEqual(internals.lintTree(withStatus), lintTree(withStatus));
+  assert.deepEqual(internals.lintTree(withStatus), lintTree(withStatus, { locale: 'zh' }));
 });
