@@ -69,6 +69,10 @@ it, branch it, and diff it.
 - **Plan awareness.** A superpowers plan is recognised by its `### Task` structure: tasks
   and steps become the tree, and the panel applies the plan rules instead of the prose
   rules — so interface drift shows up without leaving dsh.
+- **Project import.** Drag a repository folder onto the panel (or use 导入项目): it reads
+  the `.md` / `.json` files it can find — skipping `node_modules`, `dist`, `.git` — and
+  builds a tree of the package, its stack, top-level modules, docs, and any
+  `docs/superpowers/{specs,plans}` it contains. Everything stays local.
 - **Two extractors.** Local rule extraction (offline, instant, free) or any
   OpenAI-compatible endpoint for semantic extraction, with automatic fallback.
 - **Time travel.** A slider reveals nodes in reasoning order, so you can replay how the
@@ -409,6 +413,29 @@ The dsh Client half is deliberately self-contained: dsh loads it as a browser mo
 through `window.__ModuleLoader__`, so it cannot import npm packages at runtime.
 
 ---
+
+## What's different
+
+1. **It audits plans, not just prose.** Every tool in this space checks writing. This one
+   also parses `### Task` / `Consumes` / `Produces` and checks the *interface graph* — the
+   exact thing `writing-plans` asks a human to self-review, and the exact place signature
+   drift hides.
+2. **Two engines, one contract.** The dsh panel cannot import npm packages, so it carries
+   its own copy of the engine. A parity test asserts byte-identical output across
+   extraction, layout, lint, plan lint and both export formats.
+3. **A tree you can stand inside.** Time-travel reveal by creation order, fly-to on click,
+   keyboard roaming. Reasoning is navigated, not scrolled.
+4. **Coverage tracing without an LLM.** Spec decisions are matched to plan tasks lexically,
+   scoped to the spec's Decision section, reported as a pointer rather than a verdict. No
+   API key, no token cost, no hallucinated "covered".
+5. **Baseline by fingerprint, not by line.** Findings are keyed `rule|file|label`, so
+   renaming a heading does not resurface a hundred historical findings — the failure mode
+   that gets linters uninstalled in week one.
+6. **Local project import.** Drop a folder; get a tree of its docs, modules and superpowers
+   plans. No server, no upload, no indexing service.
+
+The full module list lives in [docs/project-plan.md](docs/project-plan.md) — written in the
+superpowers plan format, and it audits clean with this tool's own `treelog plan`.
 
 ## Performance
 

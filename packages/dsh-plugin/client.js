@@ -728,6 +728,7 @@ window.__ModuleLoader__.load({
       const lines = String(markdown).replace(/\r\n/g, '\n').split('\n');
       const plan = { title: '', tasks: [], reviewCount: 0, totalLines: lines.length, fenceLines: 0 };
       let task = null;
+      let currentStep = null;
       let inFence = false;
       let inReview = false;
 
@@ -765,6 +766,7 @@ window.__ModuleLoader__.load({
             steps: [],
           };
           inReview = false;
+          currentStep = null;
           continue;
         }
 
@@ -795,11 +797,19 @@ window.__ModuleLoader__.load({
 
         const step = line.match(/^\s*-\s*\[([ xX])\]\s*(?:\*\*)?Step\s+(\d+)\s*[:：]?\s*(?:\*\*)?\s*(.*)$/);
         if (step) {
-          task.steps.push({
+          currentStep = {
             index: Number(step[2]),
             text: step[3].replace(/\*+\s*$/, '').trim(),
             line: lineNo,
-          });
+            detail: '',
+          };
+          task.steps.push(currentStep);
+          continue;
+        }
+
+        // Body lines under a step carry the Run:/Expected: pair.
+        if (currentStep && line.trim() && !/^\s*-\s*\[/.test(line)) {
+          currentStep.detail += `${line}\n`;
         }
       }
 
@@ -807,8 +817,11 @@ window.__ModuleLoader__.load({
       return plan;
     }
 
-    function isVerificationStep(text) {
-      return /(^|\b)(run|execute|运行)\b|expected\s*:|verify it (passes|fails)/i.test(text);
+    function isVerificationStep(step) {
+      const haystack = typeof step === 'string' ? step : `${step.text || ''} ${step.detail || ''}`;
+      return /(^|\b)(run|execute|verify|运行|验证)\b|expected\s*:|verify it (passes|fails)|should (pass|fail)/i.test(
+        haystack,
+      );
     }
 
     function lintPlanClient(plan) {
@@ -873,7 +886,7 @@ window.__ModuleLoader__.load({
           }
         });
 
-        if (!task.steps.some((s) => isVerificationStep(s.text))) {
+        if (!task.steps.some((s) => isVerificationStep(s))) {
           add(
             'task-without-verification',
             task,
@@ -942,6 +955,156 @@ window.__ModuleLoader__.load({
         });
       });
       return nodes;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Local project import
+     * ------------------------------------------------------------------ */
+
+    const PROJECT_SKIP = /(^|\/)(node_modules|\.git|dist|build|coverage|\.next|vendor|out)(\/|$)/i;
+    const PROJECT_READABLE = /\.(md|markdown|mdx|json)$/i;
+    const PROJECT_BUDGET = 400;
+
+    function readDocTitle(text) {
+      const match = String(text).match(/^#\s+(.+?)\s*$/m);
+      return match ? match[1].trim() : '';
+    }
+
+    /** Walk a dropped FileSystemDirectoryEntry into a flat file list. */
+    async function walkEntry(entry, prefix, out) {
+      if (!entry || out.length >= PROJECT_BUDGET) return;
+      if (entry.isFile) {
+        out.push({ path: `${prefix}${entry.name}`, entry });
+        return;
+      }
+      if (!entry.isDirectory || PROJECT_SKIP.test(`${prefix}${entry.name}`)) return;
+
+      const reader = entry.createReader();
+      const readBatch = () => new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+      let batch = await readBatch();
+      while (batch.length && out.length < PROJECT_BUDGET) {
+        for (const child of batch) {
+          if (out.length >= PROJECT_BUDGET) break;
+          await walkEntry(child, `${prefix}${entry.name}/`, out);
+        }
+        batch = await readBatch();
+      }
+    }
+
+    function entryToFile(item) {
+      if (item.file) return Promise.resolve(item.file);
+      return new Promise((resolve, reject) => item.entry.file(resolve, reject));
+    }
+
+    /**
+     * Turn a local project into a thought tree: project root, stack constraints,
+     * top-level modules, documents, and any superpowers plans it contains.
+     */
+    function buildProjectTree(files) {
+      const nodes = [];
+      const now = Date.now();
+      let seq = 0;
+
+      const push = (parentId, label, text, type, extra) => {
+        seq += 1;
+        const node = {
+          id: `pr${seq}`,
+          parentId,
+          label: String(label || text || '').slice(0, 30),
+          text: text || label || '',
+          type,
+          confidence: 0.75,
+          branchId: DEFAULT_BRANCH,
+          createdAt: now + seq,
+          tags: [],
+          ...(extra || {}),
+        };
+        nodes.push(node);
+        return node;
+      };
+
+      const byPath = (re) => files.find((f) => re.test(f.path));
+      const packageFile = byPath(/(^|\/)package\.json$/);
+      let pkg = null;
+      if (packageFile) {
+        try {
+          pkg = JSON.parse(packageFile.text);
+        } catch {
+          pkg = null;
+        }
+      }
+
+      const topName = files.length ? files[0].path.split('/')[0] : '';
+      const projectName = (pkg && pkg.name) || topName || 'local project';
+      const root = push(null, projectName, (pkg && pkg.description) || `Imported from ${projectName}`, 'claim', {
+        isSection: true,
+      });
+
+      const deps = pkg
+        ? Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) })
+        : [];
+      if (deps.length) {
+        push(root.id, `Stack: ${deps.slice(0, 3).join(', ')}`, deps.join(', '), 'constraint');
+      }
+      if (pkg && pkg.scripts && pkg.scripts.test) {
+        push(root.id, `Test: ${String(pkg.scripts.test).slice(0, 40)}`, String(pkg.scripts.test), 'evidence');
+      }
+
+      // Top-level modules, but only when there are enough files to be meaningful.
+      const dirCount = new Map();
+      for (const file of files) {
+        const parts = file.path.split('/');
+        if (parts.length > 1) dirCount.set(parts[0], (dirCount.get(parts[0]) || 0) + 1);
+      }
+      for (const [dir, count] of [...dirCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+        push(root.id, `${dir}/ (${count})`, `${dir} module, ${count} readable files`, 'claim', {
+          isSection: true,
+        });
+      }
+
+      const docs = files.filter((f) => /\.(md|markdown|mdx)$/i.test(f.path) && !PROJECT_SKIP.test(f.path));
+      const plans = docs.filter((f) => /superpowers\/plans\//i.test(f.path));
+      const specs = docs.filter((f) => /superpowers\/specs\//i.test(f.path));
+      const others = docs.filter((f) => plans.indexOf(f) < 0 && specs.indexOf(f) < 0);
+
+      if (specs.length) {
+        const group = push(root.id, `Specs (${specs.length})`, 'Design documents', 'claim', { isSection: true });
+        specs.slice(0, 8).forEach((file) => {
+          push(group.id, readDocTitle(file.text) || file.path.split('/').pop(), file.path, 'claim');
+        });
+      }
+
+      if (plans.length) {
+        const group = push(root.id, `Plans (${plans.length})`, 'Superpowers implementation plans', 'action', {
+          isSection: true,
+        });
+        plans.slice(0, 6).forEach((file) => {
+          const plan = parsePlanClient(file.text);
+          const planNode = push(
+            group.id,
+            readDocTitle(file.text) || file.path.split('/').pop(),
+            `${plan.tasks.length} tasks · ${file.path}`,
+            'action',
+            { isSection: true },
+          );
+          plan.tasks.slice(0, 8).forEach((task) => {
+            push(planNode.id, `Task ${task.id}: ${task.title}`, task.title, 'action');
+          });
+        });
+      }
+
+      if (others.length) {
+        const group = push(root.id, `Docs (${others.length})`, 'Markdown documents', 'claim', { isSection: true });
+        others.slice(0, 12).forEach((file) => {
+          push(group.id, readDocTitle(file.text) || file.path.split('/').pop(), file.path, 'claim');
+        });
+      }
+
+      if (nodes.length === 1) {
+        push(root.id, 'No readable .md or .json files', 'Drop a project folder containing docs', 'question');
+      }
+
+      return { title: `${projectName} · project`, nodes };
     }
 
     /* ------------------------------------------------------------------ *
@@ -1827,6 +1990,60 @@ window.__ModuleLoader__.load({
         [currentId],
       );
 
+      const folderRef = useRef(null);
+
+      const importProject = async (entries) => {
+        setBusy(true);
+        setError('');
+        setNotice('');
+        try {
+          const readable = entries
+            .filter((entry) => PROJECT_READABLE.test(entry.path) && !PROJECT_SKIP.test(entry.path))
+            .slice(0, 300);
+
+          const files = [];
+          for (const item of readable) {
+            const file = await entryToFile(item);
+            if (!file || file.size > 400000) continue;
+            files.push({ path: item.path, text: await file.text() });
+          }
+
+          if (!files.length) {
+            setNotice('这个项目里没有可解析的 .md / .json 文件');
+            return;
+          }
+
+          const built = buildProjectTree(files);
+          const now = Date.now();
+          const tree = {
+            id: uid('tree'),
+            title: built.title,
+            source: files.map((f) => `### ${f.path}`).join('\n'),
+            nodes: built.nodes,
+            createdAt: now,
+            updatedAt: now,
+            extractor: 'project',
+          };
+
+          persist([tree, ...trees].slice(0, 40));
+          setCurrentId(tree.id);
+          setSelectedId('');
+          setCutoff(built.nodes.length);
+          setNotice(`已从 ${files.length} 个文件生成项目树`);
+        } catch (err) {
+          setError((err && err.message) || String(err));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      const onFolderPicked = async (event) => {
+        const picked = Array.from(event.target.files || []);
+        event.target.value = '';
+        if (!picked.length) return;
+        await importProject(picked.map((file) => ({ path: file.webkitRelativePath || file.name, file })));
+      };
+
       const importFromClipboard = async () => {
         try {
           const text = await navigator.clipboard.readText();
@@ -1843,7 +2060,26 @@ window.__ModuleLoader__.load({
 
       const onDropFile = async (event) => {
         event.preventDefault();
-        const files = event.dataTransfer && event.dataTransfer.files;
+        const dt = event.dataTransfer;
+        if (!dt) return;
+
+        // A dropped folder becomes a project tree.
+        const items = dt.items ? Array.from(dt.items) : [];
+        if (items.length) {
+          const entry = items[0] && items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+          if (entry && entry.isDirectory) {
+            const collected = [];
+            await walkEntry(entry, '', collected);
+            if (collected.length) {
+              await importProject(collected);
+              return;
+            }
+            setNotice('这个目录里没有可读文件');
+            return;
+          }
+        }
+
+        const files = dt.files;
         const file = files && files[0];
         if (!file) return;
         if (file.size > 2 * 1024 * 1024) {
@@ -2074,7 +2310,9 @@ window.__ModuleLoader__.load({
                       ? 'AI 提取'
                       : current.extractor === 'plan'
                         ? '计划解析'
-                        : '规则提取'
+                        : current.extractor === 'project'
+                          ? '项目导入'
+                          : '规则提取'
                   }`
                 : '尚未选择'),
             h(
@@ -2187,10 +2425,24 @@ window.__ModuleLoader__.load({
                     h('button', { className: 'ttl-btn', onClick: importFromClipboard, title: '从剪贴板导入' }, '剪贴板'),
                     h('button', {
                       className: 'ttl-btn',
+                      onClick: () => folderRef.current && folderRef.current.click(),
+                      title: '导入本地项目文件夹（也可以直接把文件夹拖进来）',
+                      disabled: busy,
+                    }, '导入项目'),
+                    h('button', {
+                      className: 'ttl-btn',
                       onClick: () => setSource(SAMPLE_TEXT),
                       title: '载入示例',
                     }, '示例'),
                   ),
+                  h('input', {
+                    ref: folderRef,
+                    type: 'file',
+                    multiple: true,
+                    style: { display: 'none' },
+                    onChange: onFolderPicked,
+                    ...{ webkitdirectory: '' },
+                  }),
                   h('div', { className: 'ttl-hint' }, 'Ctrl+Enter 解析 · 支持拖入 superpowers 计划，会自动识别 Task 结构'),
                   error ? h('div', { className: 'ttl-error' }, error) : null,
                   notice ? h('div', { className: 'ttl-notice' }, notice) : null,
@@ -2326,6 +2578,8 @@ window.__ModuleLoader__.load({
         parsePlanClient,
         lintPlanClient,
         planToTreeClient,
+        buildProjectTree,
+        readDocTitle,
       };
     }
 

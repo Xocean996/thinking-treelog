@@ -133,6 +133,8 @@ export function parsePlan(markdown) {
 
   /** @type {PlanTask|null} */
   let task = null;
+  /** @type {PlanStep|null} */
+  let currentStep = null;
   /** 'files' | 'consumes' | 'produces' | null */
   let section = null;
   /** 'constraints' | 'review' | null */
@@ -177,6 +179,7 @@ export function parsePlan(markdown) {
         produces: [],
         steps: [],
       };
+      currentStep = null;
       section = null;
       listSection = null;
       continue;
@@ -196,15 +199,23 @@ export function parsePlan(markdown) {
     if (task) {
       const stepMatch = line.match(STEP_RE);
       if (stepMatch) {
-        task.steps.push({
+        currentStep = {
           index: Number(stepMatch[2]),
           // Strip the closing bold marker: "**Step 1: Do it**" -> "Do it"
           text: stepMatch[3].replace(/\*+\s*$/, '').trim(),
           done: stepMatch[1].toLowerCase() === 'x',
           line: lineNo,
-        });
+          detail: '',
+        };
+        task.steps.push(currentStep);
         section = null;
         continue;
+      }
+
+      // Accumulate the body under a step: the command and expected output live on
+      // the lines after the bold heading, and the linter needs to see them.
+      if (currentStep && line.trim() && !/^\s*-\s*\[/.test(line)) {
+        currentStep.detail += `${line}\n`;
       }
 
       const field = line.match(FIELD_RE);
@@ -274,8 +285,12 @@ export function parsePlan(markdown) {
  * @property {number} [line]
  */
 
-const isVerificationStep = (text) =>
-  /(^|\b)(run|execute|运行)\b|expected\s*:|verify it (passes|fails)|should (pass|fail)/i.test(text);
+const isVerificationStep = (step) => {
+  const haystack = `${step.text || ''} ${step.detail || ''}`;
+  return /(^|\b)(run|execute|verify|运行|验证)\b|expected\s*:|verify it (passes|fails)|should (pass|fail)/i.test(
+    haystack,
+  );
+};
 
 /**
  * Lint a parsed plan.
@@ -409,7 +424,7 @@ export function lintPlan(plan, options = {}) {
       seen.set(iface.symbol, iface.signature);
     }
 
-    const hasVerification = task.steps.some((step) => isVerificationStep(step.text));
+    const hasVerification = task.steps.some((step) => isVerificationStep(step));
     if (!hasVerification) {
       add('task-without-verification', task.id, { task: task.id, title: task.title }, task.line);
     }
@@ -487,7 +502,7 @@ export function planToTree(plan) {
         taskNode.id,
         step.text || `Step ${step.index}`,
         step.text,
-        isVerificationStep(step.text) ? 'evidence' : 'action',
+        isVerificationStep(step) ? 'evidence' : 'action',
         { line: step.line },
       );
     }
