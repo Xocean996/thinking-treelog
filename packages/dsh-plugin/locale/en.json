@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "Thinking TreeLog",
+    "description": "Turn any conversation into a navigable, branchable thought tree. Time-travel through reasoning, run branch experiments, and export to Markdown or Mermaid."
+  },
+  "panel": {
+    "title": "Thought Tree",
+    "emptyTitle": "No thought tree yet",
+    "emptyHint": "Paste a conversation on the left and press \"Build thought tree\"."
+  },
+  "actions": {
+    "build": "Build thought tree",
+    "sample": "Sample",
+    "settings": "Settings",
+    "exportMarkdown": "Markdown",
+    "exportMermaid": "Mermaid",
+    "exportJson": "JSON",
+    "copy": "Copy",
+    "addChild": "Add child",
+    "branch": "Branch",
+    "delete": "Delete node",
+    "fit": "Fit"
+  }
+}

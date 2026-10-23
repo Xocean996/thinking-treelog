@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Thinking TreeLog">
+  <rect width="256" height="256" rx="56" fill="#0f172a"/>
+  <path d="M72 196 V64" stroke="#3b4a63" stroke-width="10" stroke-linecap="round"/>
+  <path d="M72 96 H130" stroke="#3b4a63" stroke-width="10" stroke-linecap="round"/>
+  <path d="M72 160 H130" stroke="#3b4a63" stroke-width="10" stroke-linecap="round"/>
+  <path d="M164 96 H196" stroke="#3b4a63" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="72" cy="50" r="18" fill="#e8590c"/>
+  <circle cx="162" cy="96" r="26" fill="#5c7cfa"/>
+  <circle cx="162" cy="160" r="26" fill="#0ca678"/>
+  <circle cx="212" cy="128" r="15" fill="#9c36b5"/>
+</svg>

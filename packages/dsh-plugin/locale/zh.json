@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "思维树 Thinking TreeLog",
+    "description": "把任意对话解析成可回溯、可分支的思维树。支持时间旅行回放、分支实验、搜索过滤，并可导出 Markdown / Mermaid。"
+  },
+  "panel": {
+    "title": "思维树",
+    "emptyTitle": "还没有思维树",
+    "emptyHint": "在左侧粘贴一段对话，点击「解析成思维树」。"
+  },
+  "actions": {
+    "build": "解析成思维树",
+    "sample": "示例",
+    "settings": "设置",
+    "exportMarkdown": "Markdown",
+    "exportMermaid": "Mermaid",
+    "exportJson": "JSON",
+    "copy": "复制",
+    "addChild": "添加子节点",
+    "branch": "分支实验",
+    "delete": "删除节点",
+    "fit": "适应画布"
+  }
+}
