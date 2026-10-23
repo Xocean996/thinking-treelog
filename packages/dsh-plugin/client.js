@@ -1168,14 +1168,21 @@ window.__ModuleLoader__.load({
         width: 100%; max-width: calc(100vw - 300px); min-width: 0;
         box-sizing: border-box;
         overflow: hidden;
-        background: var(--dsw-alias-bg-base, #fff);
+        background:
+          radial-gradient(900px 440px at 82% -10%, rgba(47, 111, 235, 0.16), transparent 62%),
+          radial-gradient(700px 400px at 2% 106%, rgba(156, 54, 181, 0.11), transparent 60%),
+          var(--dsw-alias-bg-base, #fff);
         color: var(--dsw-alias-label-primary, #1a1a1a);
         font-size: 13px;
       }
       .ttl-bar {
         display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-        padding: 8px 14px; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
-        background: var(--dsw-alias-bg-layer-1, #fafafa); flex: none;
+        padding: 8px 14px;
+        border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 55%, transparent);
+        backdrop-filter: blur(18px) saturate(1.35);
+        -webkit-backdrop-filter: blur(18px) saturate(1.35);
+        flex: none;
       }
       .ttl-bar-row {
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -1190,15 +1197,20 @@ window.__ModuleLoader__.load({
       .ttl-spacer { flex: 1; }
       .ttl-btn {
         display: inline-flex; align-items: center; gap: 5px;
-        border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 8px;
-        background: var(--dsw-alias-bg-layer-1, #fff); color: inherit;
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 11%, transparent);
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 58%, transparent);
+        backdrop-filter: blur(10px) saturate(1.2);
+        -webkit-backdrop-filter: blur(10px) saturate(1.2);
+        color: inherit;
         padding: 6px 11px; font-size: 12px; cursor: pointer; line-height: 1.4;
         white-space: nowrap;
+        box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
         transition: border-color .15s ease, background .15s ease, transform .08s ease, box-shadow .15s ease;
       }
       .ttl-btn:hover {
-        border-color: var(--dsw-alias-border-l2, #b9bdc6);
-        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        border-color: color-mix(in srgb, #2f6feb 45%, transparent);
+        box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent), 0 2px 8px rgba(0,0,0,.10);
       }
       .ttl-btn:active { transform: translateY(1px); }
       .ttl-btn:focus-visible { outline: 2px solid #2f6feb; outline-offset: 2px; }
@@ -1210,17 +1222,37 @@ window.__ModuleLoader__.load({
       .ttl-btn.primary:disabled { background: #9db4e8; }
       .ttl-btn.ghost { background: transparent; border-color: transparent; }
       .ttl-input, .ttl-select, .ttl-textarea {
-        border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 7px;
-        background: var(--dsw-alias-bg-base, #fff); color: inherit;
-        padding: 6px 8px; font-size: 12px; font-family: inherit;
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 11%, transparent);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 56%, transparent);
+        backdrop-filter: blur(12px) saturate(1.25);
+        -webkit-backdrop-filter: blur(12px) saturate(1.25);
+        color: inherit;
+        padding: 7px 10px; font-size: 12px; font-family: inherit;
+        box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+        transition: border-color .18s ease, box-shadow .18s ease;
       }
-      .ttl-textarea { resize: vertical; line-height: 1.6; }
+      .ttl-input:focus, .ttl-select:focus, .ttl-textarea:focus {
+        outline: none;
+        border-color: color-mix(in srgb, #2f6feb 55%, transparent);
+        box-shadow:
+          0 0 0 3px color-mix(in srgb, #2f6feb 16%, transparent),
+          inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+      }
+      .ttl-textarea {
+        resize: vertical; line-height: 1.65;
+        border-radius: 14px; padding: 12px 14px;
+        backdrop-filter: blur(22px) saturate(1.45);
+        -webkit-backdrop-filter: blur(22px) saturate(1.45);
+      }
       .ttl-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
       .ttl-side {
         width: 316px; flex: 0 1 316px; min-width: 240px;
         display: flex; flex-direction: column; min-height: 0;
-        border-right: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
-        background: var(--dsw-alias-bg-layer-1, #fafafa);
+        border-right: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 46%, transparent);
+        backdrop-filter: blur(20px) saturate(1.3);
+        -webkit-backdrop-filter: blur(20px) saturate(1.3);
       }
       .ttl-side-inner { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
       .ttl-side h4 {
@@ -1247,10 +1279,13 @@ window.__ModuleLoader__.load({
       .ttl-tree-item .meta { font-size: 10px; color: var(--dsw-alias-label-secondary, #888); }
       .ttl-canvas {
         flex: 1; position: relative; min-width: 0; overflow: hidden;
-        background-color: var(--dsw-alias-bg-base, #fff);
+        /* The host slot reports a wider box than the visible column; cap the
+           canvas so the SVG's 100% resolves to what's actually on screen. */
+        max-width: min(100%, calc(100vw - 620px));
+        background-color: transparent;
         background-image: radial-gradient(
           circle,
-          color-mix(in srgb, var(--dsw-alias-label-secondary, #999) 26%, transparent) 1px,
+          color-mix(in srgb, var(--dsw-alias-label-secondary, #999) 24%, transparent) 1px,
           transparent 1px
         );
         background-size: 22px 22px;
@@ -1265,8 +1300,12 @@ window.__ModuleLoader__.load({
       }
       .ttl-empty strong { color: var(--dsw-alias-label-primary, #333); font-size: 14px; }
       .ttl-detail {
-        width: 320px; flex: none; border-left: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
-        background: var(--dsw-alias-bg-layer-1, #fafafa); overflow: auto; padding: 12px;
+        width: 320px; flex: none;
+        border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 46%, transparent);
+        backdrop-filter: blur(20px) saturate(1.3);
+        -webkit-backdrop-filter: blur(20px) saturate(1.3);
+        overflow: auto; padding: 12px;
         display: flex; flex-direction: column; gap: 10px;
       }
       .ttl-detail .row { display: flex; gap: 6px; }
@@ -1330,15 +1369,23 @@ window.__ModuleLoader__.load({
       .ttl-dock {
         display: flex; align-items: center; gap: 8px; margin: 0 auto 8px;
         max-width: 760px; width: calc(100% - 32px); box-sizing: border-box;
-        padding: 7px 12px; border-radius: 11px; cursor: pointer;
-        background: var(--dsw-alias-bg-layer-1, #f7f8fa);
-        border: 1px solid var(--dsw-alias-border-l1, #e2e5ea);
+        padding: 8px 13px; border-radius: 13px; cursor: pointer;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #f7f8fa) 55%, transparent);
+        backdrop-filter: blur(18px) saturate(1.35);
+        -webkit-backdrop-filter: blur(18px) saturate(1.35);
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 9%, transparent);
+        box-shadow:
+          inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+          0 6px 18px rgba(0, 0, 0, 0.10);
         font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b7280);
-        transition: border-color .15s ease, box-shadow .15s ease;
+        transition: border-color .16s ease, box-shadow .16s ease, transform .12s ease;
       }
       .ttl-dock:hover {
-        border-color: #2f6feb;
-        box-shadow: 0 2px 10px rgba(47,111,235,.16);
+        border-color: color-mix(in srgb, #2f6feb 55%, transparent);
+        box-shadow:
+          inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
+          0 8px 24px rgba(47, 111, 235, 0.18);
+        transform: translateY(-1px);
       }
       .ttl-dock-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f6feb; flex: none; }
       .ttl-dock-title {
@@ -1483,13 +1530,21 @@ window.__ModuleLoader__.load({
       // Fit whenever the topology changes shape. The first node's timestamp makes
       // two trees with identical geometry still re-fit when you switch between them.
       const signature = `${layout.width}x${layout.height}x${nodes.length}x${nodes[0] ? nodes[0].createdAt : 0}`;
+
+      // The host slot can report a box wider than the visible column, so clamp the
+      // fitting width to what the viewport can actually show.
+      const visibleWidth = () => {
+        const viewport = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1200;
+        return Math.max(320, viewport - 620);
+      };
+
       useEffect(() => {
         if (fittedRef.current === signature) return;
         fittedRef.current = signature;
         const el = svgRef.current;
         if (!el) return;
         const box = el.getBoundingClientRect();
-        const availW = Math.max(200, box.width || 800);
+        const availW = Math.max(200, Math.min(box.width || 800, visibleWidth()));
         const availH = Math.max(200, box.height || 600);
         const scale = Math.min(availW / Math.max(1, layout.width), availH / Math.max(1, layout.height), 1.1);
         const w = availW / scale;
@@ -1601,7 +1656,8 @@ window.__ModuleLoader__.load({
       const fitAll = useCallback(() => {
         const el = svgRef.current;
         const box = el ? el.getBoundingClientRect() : { width: 800, height: 600 };
-        const availW = Math.max(200, box.width || 800);
+        const viewport = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1200;
+        const availW = Math.max(200, Math.min(box.width || 800, Math.max(320, viewport - 620)));
         const availH = Math.max(200, box.height || 600);
         const scale = Math.min(availW / Math.max(1, layout.width), availH / Math.max(1, layout.height), 1.1);
         const w = availW / scale;
