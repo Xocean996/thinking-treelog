@@ -28,6 +28,7 @@ import {
   toSarif,
 } from '@thinking-treelog/core/engineering';
 import { lintPlan, parsePlan, planToTree } from '@thinking-treelog/core/plan';
+import { analyzeRhythm, formatRhythm, rhythmToTree } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 
 export const EXIT_CODES = { ok: 0, findings: 1, usage: 2 };
@@ -528,6 +529,51 @@ export async function tracePaths(specPath, planPath, options = {}) {
         });
 
   return { result, text, exitCode: result.unmatched.length > 0 ? EXIT_CODES.findings : EXIT_CODES.ok };
+}
+
+/**
+ * Read a project's rhythm from git history (or file mtimes when there is no repo).
+ *
+ * @param {string} dir
+ * @param {{ limit?: number, format?: string, locale?: string }} [options]
+ */
+export async function rhythmReport(dir, options = {}) {
+  const analysis = analyzeRhythm(dir, {
+    limit: options.limit,
+    commits: options.commits,
+    now: options.now,
+  });
+  const tree = rhythmToTree(analysis);
+
+  const text =
+    options.format === 'json'
+      ? JSON.stringify(
+          {
+            project: analysis.project,
+            source: analysis.source,
+            activeDays: analysis.activeDays,
+            spanDays: analysis.spanDays,
+            cadencePerDay: analysis.cadencePerDay,
+            lastAgoDays: analysis.lastAgoDays,
+            stalled: analysis.stalled,
+            streakDays: analysis.streakDays,
+            themes: analysis.themes,
+            phases: analysis.phases.map((phase) => ({
+              start: new Date(phase.start).toISOString().slice(0, 10),
+              end: new Date(phase.end).toISOString().slice(0, 10),
+              count: phase.count,
+              themes: phase.themes,
+            })),
+            recent: analysis.commits.slice(0, 10).map((c) => c.subject),
+          },
+          null,
+          2,
+        )
+      : options.format === 'tree'
+        ? renderAsciiTree(tree)
+        : formatRhythm(analysis, { locale: options.locale });
+
+  return { analysis, tree, text };
 }
 
 /**

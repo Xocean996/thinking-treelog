@@ -22,6 +22,7 @@ import {
   loadTree,
   planTreeText,
   renderAsciiTree,
+  rhythmReport,
   tracePaths,
 } from '../lib/commands.mjs';
 
@@ -35,6 +36,7 @@ Usage:
   treelog plan <file> [options]         Audit a structured implementation plan
                                         (superpowers writing-plans format)
   treelog trace <spec> <plan>           Check every spec decision has a task
+  treelog rhythm [dir]                  Read the project's pace from git history
   treelog tree <file>                   Print the thought tree as ASCII
   treelog export <file> [options]       Export md | mermaid | adr | json | stats
   treelog diff <before> <after>         Compare two revisions of a decision
@@ -237,6 +239,22 @@ async function main() {
 
     // Tracing is an aid, not a gate: only fail when explicitly asked.
     return flags.failOn === 'unmatched' ? result.exitCode : EXIT_CODES.ok;
+  }
+
+  if (command === 'rhythm') {
+    const dir = files[0] || process.cwd();
+    const result = await rhythmReport(dir, {
+      limit: flags.limit ? Number(flags.limit) : undefined,
+      format: typeof flags.format === 'string' ? flags.format : 'text',
+      locale: typeof flags.lang === 'string' ? flags.lang : 'zh',
+    });
+
+    if (flags.out) await writeFile(flags.out, result.text, 'utf8');
+    else process.stdout.write(`${result.text}\n`);
+
+    return flags.failOn === 'stalled' && result.analysis.stalled
+      ? EXIT_CODES.findings
+      : EXIT_CODES.ok;
   }
 
   if (command === 'tree') {

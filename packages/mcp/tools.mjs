@@ -19,6 +19,7 @@ import {
   toAdr,
 } from '@thinking-treelog/core/engineering';
 import { lintPlan, parsePlan } from '@thinking-treelog/core/plan';
+import { analyzeRhythm, formatRhythm } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 
 export const TOOLS = [
@@ -159,6 +160,28 @@ export const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'project_rhythm',
+    description:
+      'Read a working project\'s pace from its git history and report it: active days, sprint ' +
+      'phases, theme mix, whether the work has stalled, and what to pick up next. Falls back to ' +
+      'file modification times when the directory is not a git repository. Use this when the ' +
+      'user asks "where is this project at" or "what should I do next".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Project directory. Defaults to the server working directory.',
+        },
+        limit: {
+          type: 'number',
+          description: 'How many historical events to read (default 60).',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 function textResult(text) {
@@ -271,6 +294,13 @@ export async function callTool(name, args = {}) {
         threshold: Number.isFinite(Number(args?.threshold)) ? Number(args.threshold) : undefined,
       });
       return textResult(formatTrace(result, { locale: 'en' }));
+    }
+
+    case 'project_rhythm': {
+      const dir = typeof args?.path === 'string' && args.path.trim() ? args.path : process.cwd();
+      const limit = Number.isFinite(Number(args?.limit)) ? Number(args.limit) : 60;
+      const analysis = analyzeRhythm(dir, { limit });
+      return textResult(formatRhythm(analysis, { locale: 'zh' }));
     }
 
     default:

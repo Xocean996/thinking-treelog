@@ -108,6 +108,7 @@ lint_thought_tree     tree JSON → reasoning-gap findings + severity summary
 thought_tree_adr      tree JSON → Architecture Decision Record
 lint_plan             plan markdown → interface drift, missing verification
 trace_coverage        spec + plan → which decisions have no task
+project_rhythm        git history → phases, theme mix, stall, what to pick up next
 ```
 
 ### In a CI pipeline
@@ -216,6 +217,38 @@ Two deliberate design choices:
   size: spec 18 lines → plan 82 lines (4.6×)
     ⚠ plan is much longer than the spec — likely a transcript, not a plan
   ```
+
+### Project rhythm
+
+The question people actually ask is "where is this project at?" — not "where is this
+document at". `rhythm` reads git history and answers it:
+
+```bash
+treelog rhythm .
+```
+
+```
+thinking-treelog — 项目节奏
+  14 次活动 · 1 个活跃日 · 跨度 1 天 · 日均 14
+
+当前：连续 1 天有改动
+
+阶段：
+  2026-10-23 → 2026-10-23  14 次  feature
+
+主线：
+  feature   13
+  fix        1
+
+建议：保持当前节奏，下一步接着「feat(panel): compact dock pill + display type」推进。
+```
+
+It splits history into **phases** wherever the gap exceeds two days, classifies commits
+into themes, and calls a stall when nothing moved for three days. `--format tree` renders
+the same reading as a thought tree; the MCP tool `project_rhythm` returns it straight into
+the conversation, so "梳理一下这个项目的节奏" works from chat.
+
+Non-git directories fall back to file modification times, so a scratch folder still answers.
 
 ### Configuration
 

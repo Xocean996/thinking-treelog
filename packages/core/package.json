@@ -9,6 +9,7 @@
     ".": "./src/index.js",
     "./engineering": "./src/engineering.js",
     "./plan": "./src/plan.js",
+    "./rhythm": "./src/rhythm.js",
     "./trace": "./src/trace.js"
   },
   "files": ["src"],

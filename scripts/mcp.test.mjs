@@ -21,12 +21,13 @@ function firstText(result) {
   return result.content[0].text;
 }
 
-test('tool catalogue exposes the eight documented tools', () => {
+test('tool catalogue exposes the nine documented tools', () => {
   const names = TOOLS.map((t) => t.name).sort();
   assert.deepEqual(names, [
     'build_thought_tree',
     'lint_plan',
     'lint_thought_tree',
+    'project_rhythm',
     'thought_tree_adr',
     'thought_tree_markdown',
     'thought_tree_mermaid',
@@ -156,6 +157,13 @@ test('trace_coverage reports the decision with no task', async () => {
 
 test('trace_coverage requires both documents', async () => {
   await assert.rejects(() => callTool('trace_coverage', { spec: SPEC_MD }), /spec.*plan|required/i);
+});
+
+test('project_rhythm reports a pulse for the current repository', async () => {
+  const text = firstText(await callTool('project_rhythm', { path: '.' }));
+
+  assert.match(text, /项目节奏|project rhythm/);
+  assert.match(text, /阶段|phases/);
 });
 
 test('invalid input fails loudly instead of returning junk', async () => {
