@@ -261,6 +261,12 @@ export function normalizeNodes(raw) {
     if (Number.isFinite(Number(record.line)) && Number(record.line) > 0) {
       extra.line = Number(record.line);
     }
+    if (typeof record.annotation === 'string' && record.annotation.trim()) {
+      extra.annotation = record.annotation;
+    }
+    if (typeof record.note === 'string' && record.note.trim()) {
+      extra.note = record.note;
+    }
     if (Array.isArray(record.refs)) {
       const refs = record.refs
         .filter((r) => typeof r === 'string' && r.trim())

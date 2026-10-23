@@ -259,6 +259,8 @@ window.__ModuleLoader__.load({
         if (typeof item.owner === 'string' && item.owner.trim()) extra.owner = item.owner.trim();
         if (item.isSection === true) extra.isSection = true;
         if (Number.isFinite(Number(item.line)) && Number(item.line) > 0) extra.line = Number(item.line);
+        if (typeof item.annotation === 'string' && item.annotation.trim()) extra.annotation = item.annotation;
+        if (typeof item.note === 'string' && item.note.trim()) extra.note = item.note;
         if (Array.isArray(item.refs)) {
           const refs = item.refs
             .filter((r) => typeof r === 'string' && r.trim())
@@ -1381,6 +1383,19 @@ window.__ModuleLoader__.load({
       .ttl-nav-inline button:disabled { opacity: .35; cursor: default; }
       .ttl-nav-inline button.warn { color: #e8590c; }
       .ttl-nav-inline button.on { background: #2f6feb; color: #fff; }
+      .ttl-hover {
+        position: absolute; left: 16px; right: 128px; bottom: 16px;
+        max-height: 96px; overflow: hidden;
+        padding: 9px 13px; border-radius: 12px; z-index: 4;
+        background: color-mix(in srgb, var(--dsw-alias-bg-overlay, #10131a) 88%, transparent);
+        backdrop-filter: blur(16px) saturate(1.3);
+        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+        border: 1px solid color-mix(in srgb, #2f6feb 32%, transparent);
+        box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+        font-size: 11.5px; line-height: 1.55;
+        color: var(--dsw-alias-label-primary, #e6e9ef);
+        white-space: pre-wrap; pointer-events: none;
+      }
       .ttl-dock-wrap {
         display: flex; justify-content: flex-end;
         padding: 0 14px 7px;
@@ -1562,6 +1577,7 @@ window.__ModuleLoader__.load({
       const rafRef = useRef(0);
       const issueCursor = useRef(-1);
       const [drag, setDrag] = useState(null);
+      const [hoverNote, setHoverNote] = useState('');
       const fittedRef = useRef('');
 
       const layout = useMemo(() => computeLayout(nodes), [nodes]);
@@ -1857,6 +1873,11 @@ window.__ModuleLoader__.load({
                     event.stopPropagation();
                     if (onAddChild) onAddChild(node.id);
                   },
+                  onMouseEnter: () => {
+                    const parts = [node.note, node.annotation].filter(Boolean);
+                    setHoverNote(parts.join('\n\n'));
+                  },
+                  onMouseLeave: () => setHoverNote(''),
                 },
                 // Card surface, then a colour wash, then the border.
                 h('rect', {
@@ -1941,6 +1962,9 @@ window.__ModuleLoader__.load({
               h('button', { title: '适应画布', onClick: fitAll }, '⤢'),
             )
           : null,
+        hoverNote
+          ? h('div', { className: 'ttl-hover' }, hoverNote)
+          : null,
         layout.nodes.length === 0
           ? h(
               'div',
@@ -1958,7 +1982,7 @@ window.__ModuleLoader__.load({
                 h('circle', { cx: 20.5, cy: 12, r: 1.6 }),
               ),
               h('strong', null, '还没有思维树'),
-              h('div', null, '在左侧粘贴一段对话，点击「解析成思维树」'),
+              h('div', null, '点「分析工作区」，或粘贴一段对话'),
             )
           : null,
       );
@@ -1978,7 +2002,7 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function NodeDetail(props) {
-      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose } = props;
+      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish } = props;
       const meta = TYPE_META[node.type] || TYPE_META.claim;
       const path = pathTo(graph, node.id);
 
@@ -2055,6 +2079,24 @@ window.__ModuleLoader__.load({
           h('button', { className: 'ttl-btn', onClick: () => onAddChild(node.id) }, '＋ 子节点'),
           h('button', { className: 'ttl-btn', onClick: () => onBranch(node.id) }, '⑂ 分支实验'),
         ),
+
+        h('label', { className: 'ttl-hint' }, '我的批注'),
+        h('textarea', {
+          className: 'ttl-textarea',
+          rows: 3,
+          value: node.annotation || '',
+          placeholder: '给这个节点写一句批注…',
+          onChange: (e) => onUpdate(node.id, { annotation: e.target.value }),
+        }),
+        h('div', { className: 'row' },
+          h('button', {
+            className: 'ttl-btn',
+            disabled: !node.annotation,
+            onClick: () => onPublish && onPublish(node.id),
+            title: '把批注复制到剪贴板，粘到输入框发送即可在当前工作区执行',
+          }, '发布批注'),
+        ),
+
         h('div', { className: 'row' },
           h('button', {
             className: 'ttl-btn',
@@ -2161,6 +2203,8 @@ window.__ModuleLoader__.load({
       const selected = selectedId ? graph.nodeMap.get(selectedId) : null;
       const findings = useMemo(() => {
         if (!nodes.length) return [];
+        // Workspace trees are an analysis, not a reasoning chain — no lint noise.
+        if (current && current.extractor === 'workspace') return [];
         // Plan trees carry their own rule set: interface drift, missing checks.
         if (current && current.extractor === 'plan') {
           return lintPlanClient(parsePlanClient(current.source || ''));
@@ -2241,6 +2285,43 @@ window.__ModuleLoader__.load({
           setNotice(`已从 ${files.length} 个文件生成项目树`);
         } catch (err) {
           setError((err && err.message) || String(err));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      const analyzeWorkspace = async () => {
+        setBusy(true);
+        setError('');
+        setNotice('');
+        try {
+          const response = await fetch('http://127.0.0.1:17866/pulse', { cache: 'no-store' });
+          if (!response.ok) throw new Error(`本地分析服务返回 ${response.status}`);
+          const data = await response.json();
+          if (!data.ok) throw new Error(data.error || '分析失败');
+
+          const now = Date.now();
+          const tree = {
+            id: uid('tree'),
+            title: `工作区 · ${data.analysis.title || '当前会话'}`,
+            source: '',
+            nodes: data.tree,
+            createdAt: now,
+            updatedAt: now,
+            extractor: 'workspace',
+          };
+
+          persist([tree, ...trees].slice(0, 40));
+          setCurrentId(tree.id);
+          setSelectedId('');
+          setCutoff(data.tree.length);
+          setNotice(
+            `${data.analysis.turns} 轮对话 · ${data.analysis.toolCalls} 次工具调用 · ${data.suggestions.length} 条建议`,
+          );
+        } catch (err) {
+          setError(
+            `连不上本地分析服务（${(err && err.message) || err}）。这个能力由插件的 Host 半边提供，需要重启 dsh 后生效；在此之前可以先用「导入项目」或粘贴。`,
+          );
         } finally {
           setBusy(false);
         }
@@ -2381,6 +2462,20 @@ window.__ModuleLoader__.load({
         } finally {
           clearTimeout(timeout);
           setBusy(false);
+        }
+      };
+
+      const publishAnnotation = async (id) => {
+        const target = nodes.find((n) => n.id === id);
+        if (!target || !target.annotation) {
+          setNotice('先写一条批注');
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(target.annotation);
+          setNotice('批注已复制到剪贴板，粘贴到输入框发送即可在当前工作区执行');
+        } catch (err) {
+          setNotice('复制失败，请手动选中批注文本');
         }
       };
 
@@ -2633,9 +2728,18 @@ window.__ModuleLoader__.load({
                     h('button', {
                       className: 'ttl-btn primary',
                       style: { flex: 1, justifyContent: 'center' },
+                      onClick: analyzeWorkspace,
+                      disabled: busy,
+                      title: '读取当前工作区的会话记录，梳理脉络并给出建议（需要 Host 半边）',
+                    }, busy ? '分析中…' : '分析工作区'),
+                    h('button', {
+                      className: 'ttl-btn',
                       onClick: doExtract,
                       disabled: busy,
-                    }, busy ? '解析中…' : '解析成思维树'),
+                      title: '解析左侧文本框',
+                    }, '解析'),
+                  ),
+                  h('div', { className: 'row', style: { display: 'flex', gap: 6 } },
                     h('button', { className: 'ttl-btn', onClick: importFromClipboard, title: '从剪贴板导入' }, '剪贴板'),
                     h('button', {
                       className: 'ttl-btn',
@@ -2762,6 +2866,7 @@ window.__ModuleLoader__.load({
                 onAddChild: addChild,
                 onDelete: deleteNode,
                 onClose: () => setSelectedId(''),
+                onPublish: publishAnnotation,
               })
             : null,
         ),
