@@ -162,6 +162,39 @@ It reads the file format only. superpowers needs no patch, no fork, and no PR �
 projects couple through the plan markdown, which is the one thing guaranteed to stay
 stable.
 
+### Trace spec → plan
+
+`writing-plans` also asks: *"Skim each section of the spec — can you point to a task that
+implements it?"* That is the gap where whole requirements silently vanish.
+
+```bash
+treelog trace docs/superpowers/specs/2026-10-23-x-design.md \
+              docs/superpowers/plans/2026-10-23-x.md
+```
+
+```
+superpowers-spec.md → superpowers-plan.md
+  4 decisions · threshold 0.12
+
+matched:
+  ✔ Parse the plan document and extract tasks, steps…  →  Task 1: Plan parser  (0.25)
+  ✔ Build an interface graph from the Consumes and P…  →  Task 2: Interface linter  (0.231)
+  ✔ Render the findings in a form a human can read a…  →  Task 3: Report renderer  (0.143)
+
+no plausible task (check by hand):
+  ✖ Capture the current conversation directly so nob…
+
+3/4 decisions point at a task, 1 need a human look
+```
+
+Two deliberate design choices:
+
+- **It scopes to the spec's `## Decision` section.** Context and Consequences are
+  background and fallout, not things anyone implements; tracing them produces noise.
+- **Matching is lexical and it says so.** The score is a pointer for a human, not a
+  verdict. `--fail-on unmatched` exists for teams that want the gate, but the default is
+  to report and exit 0 — a wrong "missing" flag costs more trust than a missed one.
+
 ### Configuration
 
 Drop a `treelog.config.json` anywhere above the docs (it walks up to find one):

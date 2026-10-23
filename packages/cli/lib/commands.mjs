@@ -28,6 +28,7 @@ import {
   toSarif,
 } from '@thinking-treelog/core/engineering';
 import { lintPlan, parsePlan, planToTree } from '@thinking-treelog/core/plan';
+import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 
 export const EXIT_CODES = { ok: 0, findings: 1, usage: 2 };
 
@@ -466,6 +467,57 @@ export async function planTreeText(path, options = {}) {
   const read = options.readFile ?? defaultReadFile;
   const plan = parsePlan(await read(path));
   return { plan, text: renderAsciiTree(planToTree(plan)) };
+}
+
+/**
+ * Trace spec decisions against plan tasks.
+ *
+ * @param {string} specPath
+ * @param {string} planPath
+ * @param {{ readFile?: Function, threshold?: number, format?: string, locale?: string }} [options]
+ */
+export async function tracePaths(specPath, planPath, options = {}) {
+  const read = options.readFile ?? defaultReadFile;
+  const specRaw = await read(specPath);
+  const planRaw = await read(planPath);
+
+  const specNodes = parseMarkdown(specRaw);
+  const plan = parsePlan(planRaw);
+  const result = traceCoverage(specNodes, plan.tasks, { threshold: options.threshold });
+
+  const text =
+    options.format === 'json'
+      ? JSON.stringify(
+          {
+            spec: basename(specPath),
+            plan: basename(planPath),
+            threshold: result.threshold,
+            summary: {
+              decisions: result.decisionCount,
+              matched: result.matched.length,
+              unmatched: result.unmatched.length,
+              unreferencedTasks: result.unreferencedTasks.length,
+            },
+            entries: result.entries.map((entry) => ({
+              label: entry.node.label,
+              type: entry.node.type,
+              taskId: entry.taskId,
+              taskTitle: entry.taskTitle,
+              score: entry.score,
+              matched: entry.matched,
+            })),
+            unreferencedTasks: result.unreferencedTasks,
+          },
+          null,
+          2,
+        )
+      : formatTrace(result, {
+          specTitle: basename(specPath),
+          planTitle: basename(planPath),
+          locale: options.locale,
+        });
+
+  return { result, text, exitCode: result.unmatched.length > 0 ? EXIT_CODES.findings : EXIT_CODES.ok };
 }
 
 /**

@@ -22,6 +22,7 @@ import {
   loadTree,
   planTreeText,
   renderAsciiTree,
+  tracePaths,
 } from '../lib/commands.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,7 @@ Usage:
   treelog lint <files...> [options]     Check documents for reasoning gaps (CI-ready)
   treelog plan <file> [options]         Audit a structured implementation plan
                                         (superpowers writing-plans format)
+  treelog trace <spec> <plan>           Check every spec decision has a task
   treelog tree <file>                   Print the thought tree as ASCII
   treelog export <file> [options]       Export md | mermaid | adr | json | stats
   treelog diff <before> <after>         Compare two revisions of a decision
@@ -217,6 +219,24 @@ async function main() {
       return result.summary.error + result.summary.warning > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;
     }
     return result.summary.error > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;
+  }
+
+  if (command === 'trace') {
+    if (files.length < 2) {
+      process.stderr.write('treelog trace needs a spec file and a plan file\n');
+      return EXIT_CODES.usage;
+    }
+    const result = await tracePaths(files[0], files[1], {
+      threshold: flags.threshold ? Number(flags.threshold) : undefined,
+      format: typeof flags.format === 'string' ? flags.format : 'text',
+      locale: typeof flags.lang === 'string' ? flags.lang : 'en',
+    });
+
+    if (flags.out) await writeFile(flags.out, result.text, 'utf8');
+    else process.stdout.write(`${result.text}\n`);
+
+    // Tracing is an aid, not a gate: only fail when explicitly asked.
+    return flags.failOn === 'unmatched' ? result.exitCode : EXIT_CODES.ok;
   }
 
   if (command === 'tree') {
