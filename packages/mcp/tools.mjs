@@ -12,7 +12,14 @@ import {
   toMarkdown,
   toMermaid,
 } from '@thinking-treelog/core';
-import { lintTree, summarizeFindings, toAdr } from '@thinking-treelog/core/engineering';
+import {
+  lintTree,
+  parseMarkdown,
+  summarizeFindings,
+  toAdr,
+} from '@thinking-treelog/core/engineering';
+import { lintPlan, parsePlan } from '@thinking-treelog/core/plan';
+import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 
 export const TOOLS = [
   {
@@ -113,6 +120,45 @@ export const TOOLS = [
       additionalProperties: true,
     },
   },
+  {
+    name: 'lint_plan',
+    description:
+      'Audit a structured implementation plan (the superpowers writing-plans format) before ' +
+      'anyone writes code. Catches interface drift: a task consuming a symbol no task produces, ' +
+      'the same symbol declared with two different signatures, a task with no runnable ' +
+      'verification step, and a missing Review Focus section. Returns JSON findings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        markdown: {
+          type: 'string',
+          description: 'The plan document. Must contain "### Task N: ..." headings.',
+        },
+      },
+      required: ['markdown'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'trace_coverage',
+    description:
+      'Check that every decision in a design spec has a corresponding task in the plan. ' +
+      'Returns which decisions match a task, which have no plausible task, and which tasks the ' +
+      'spec never mentions. Lexical matching: treat a low score as "look at this", not a verdict.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        spec: { type: 'string', description: 'The design document (Markdown).' },
+        plan: { type: 'string', description: 'The implementation plan (Markdown).' },
+        threshold: {
+          type: 'number',
+          description: 'Match threshold between 0 and 1 (default 0.12).',
+        },
+      },
+      required: ['spec', 'plan'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function textResult(text) {
@@ -187,6 +233,44 @@ export async function callTool(name, args = {}) {
           },
         ),
       );
+    }
+
+    case 'lint_plan': {
+      const markdown = String(args?.markdown ?? '');
+      if (!markdown.trim()) throw new Error('`markdown` is required');
+      const plan = parsePlan(markdown);
+      if (!plan.tasks.length) {
+        throw new Error('no tasks found — expected "### Task N: ..." headings');
+      }
+      const findings = lintPlan(plan, { locale: 'en' });
+      return textResult(
+        JSON.stringify(
+          {
+            title: plan.title,
+            tasks: plan.tasks.length,
+            summary: summarizeFindings(findings),
+            findings,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+
+    case 'trace_coverage': {
+      const spec = String(args?.spec ?? '');
+      const planText = String(args?.plan ?? '');
+      if (!spec.trim() || !planText.trim()) throw new Error('`spec` and `plan` are required');
+
+      const plan = parsePlan(planText);
+      if (!plan.tasks.length) {
+        throw new Error('no tasks found in `plan` — expected "### Task N: ..." headings');
+      }
+
+      const result = traceCoverage(parseMarkdown(spec), plan.tasks, {
+        threshold: Number.isFinite(Number(args?.threshold)) ? Number(args.threshold) : undefined,
+      });
+      return textResult(formatTrace(result, { locale: 'en' }));
     }
 
     default:

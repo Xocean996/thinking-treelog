@@ -485,6 +485,11 @@ export async function tracePaths(specPath, planPath, options = {}) {
   const plan = parsePlan(planRaw);
   const result = traceCoverage(specNodes, plan.tasks, { threshold: options.threshold });
 
+  const proportion = {
+    specLines: specRaw.split('\n').length,
+    planLines: planRaw.split('\n').length,
+  };
+
   const text =
     options.format === 'json'
       ? JSON.stringify(
@@ -497,6 +502,10 @@ export async function tracePaths(specPath, planPath, options = {}) {
               matched: result.matched.length,
               unmatched: result.unmatched.length,
               unreferencedTasks: result.unreferencedTasks.length,
+            },
+            proportion: {
+              ...proportion,
+              ratio: Number((proportion.planLines / Math.max(1, proportion.specLines)).toFixed(2)),
             },
             entries: result.entries.map((entry) => ({
               label: entry.node.label,
@@ -515,6 +524,7 @@ export async function tracePaths(specPath, planPath, options = {}) {
           specTitle: basename(specPath),
           planTitle: basename(planPath),
           locale: options.locale,
+          proportion,
         });
 
   return { result, text, exitCode: result.unmatched.length > 0 ? EXIT_CODES.findings : EXIT_CODES.ok };

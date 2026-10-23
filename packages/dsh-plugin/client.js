@@ -702,7 +702,9 @@ window.__ModuleLoader__.load({
       'undefined-consume': { severity: 'error', text: '消费了没有 Task 生产的符号' },
       'signature-mismatch': { severity: 'error', text: '同一个符号有两种签名' },
       'task-without-verification': { severity: 'warning', text: 'Task 没有可执行的验证步骤' },
+      'task-without-files': { severity: 'warning', text: 'Task 没有列出文件' },
       'review-focus-empty': { severity: 'warning', text: '多任务计划缺少 Review Focus' },
+      'code-block-heavy': { severity: 'info', text: '代码块占计划比例过高' },
     };
 
     function looksLikePlan(text) {
@@ -724,7 +726,7 @@ window.__ModuleLoader__.load({
 
     function parsePlanClient(markdown) {
       const lines = String(markdown).replace(/\r\n/g, '\n').split('\n');
-      const plan = { title: '', tasks: [], reviewCount: 0 };
+      const plan = { title: '', tasks: [], reviewCount: 0, totalLines: lines.length, fenceLines: 0 };
       let task = null;
       let inFence = false;
       let inReview = false;
@@ -735,8 +737,15 @@ window.__ModuleLoader__.load({
         const line = lines[i];
         const lineNo = i + 1;
 
-        if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
-        if (inFence) continue;
+        if (/^\s*(```|~~~)/.test(line)) {
+          inFence = !inFence;
+          plan.fenceLines += 1;
+          continue;
+        }
+        if (inFence) {
+          plan.fenceLines += 1;
+          continue;
+        }
 
         if (!plan.title) {
           const h1 = line.match(/^#\s+(.+?)\s*$/);
@@ -880,6 +889,18 @@ window.__ModuleLoader__.load({
 
       if (plan.tasks.length > 1 && plan.reviewCount === 0) {
         add('review-focus-empty', null, '多任务计划缺少 Review Focus 段', '写出 spec 没有覆盖的输入或失败模式');
+      }
+
+      if (plan.totalLines > 0) {
+        const percent = Math.round((plan.fenceLines / plan.totalLines) * 100);
+        if (percent > 50) {
+          add(
+            'code-block-heavy',
+            null,
+            `代码块占计划的 ${percent}% —— 写签名，不要写实现`,
+            '把实现体换成签名、测试名和断言',
+          );
+        }
       }
 
       return findings;

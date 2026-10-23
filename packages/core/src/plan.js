@@ -30,6 +30,10 @@ export const PLAN_RULES = {
     severity: 'warning',
     description: 'No review focus recorded for a multi-task plan',
   },
+  'code-block-heavy': {
+    severity: 'info',
+    description: 'Code blocks dominate the plan — write signatures, not bodies',
+  },
   'unused-produce': {
     severity: 'info',
     description: 'A task produces a symbol nothing consumes',
@@ -123,6 +127,8 @@ export function parsePlan(markdown) {
     constraints: [],
     reviewFocus: [],
     tasks: [],
+    totalLines: lines.length,
+    fenceLines: 0,
   };
 
   /** @type {PlanTask|null} */
@@ -143,9 +149,13 @@ export function parsePlan(markdown) {
 
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence;
+      plan.fenceLines += 1;
       continue;
     }
-    if (inFence) continue;
+    if (inFence) {
+      plan.fenceLines += 1;
+      continue;
+    }
 
     if (!plan.title) {
       const h1 = line.match(/^#\s+(.+?)\s*$/);
@@ -289,6 +299,8 @@ export function lintPlan(plan, options = {}) {
       'task-without-files': (v) => `Task ${v.task} "${v.title}" lists no files`,
       'review-focus-empty': () => `Multi-task plan has an empty Review Focus section`,
       'unused-produce': (v) => `Task ${v.task} produces "${v.symbol}" but nothing consumes it`,
+      'code-block-heavy': (v) =>
+        `Code blocks are ${v.percent}% of the plan — write signatures, not bodies`,
     },
     zh: {
       'undefined-consume': (v) => `Task ${v.task} 消费了「${v.symbol}」，但没有任何 Task 生产它`,
@@ -297,6 +309,7 @@ export function lintPlan(plan, options = {}) {
       'task-without-files': (v) => `Task ${v.task}「${v.title}」没有列出文件`,
       'review-focus-empty': () => `多任务计划缺少 Review Focus 段`,
       'unused-produce': (v) => `Task ${v.task} 生产了「${v.symbol}」，但没人消费`,
+      'code-block-heavy': (v) => `代码块占计划的 ${v.percent}% —— 写签名，不要写实现`,
     },
   }[locale];
 
@@ -308,6 +321,7 @@ export function lintPlan(plan, options = {}) {
       'task-without-files': 'List the files this task creates or modifies',
       'review-focus-empty': 'Name the inputs or failure modes the spec leaves untested',
       'unused-produce': 'Remove it, or mark it as public API',
+      'code-block-heavy': 'Replace bodies with signatures, test names and assertions',
     },
     zh: {
       'undefined-consume': '要么在对应 Task 补上 Produces，要么改掉 Consumes 的名字',
@@ -316,6 +330,7 @@ export function lintPlan(plan, options = {}) {
       'task-without-files': '列出这个 Task 创建或修改的文件',
       'review-focus-empty': '写出 spec 没有覆盖的输入或失败模式',
       'unused-produce': '删掉它，或者标注为公共 API',
+      'code-block-heavy': '把实现体换成签名、测试名和断言',
     },
   }[locale];
 
@@ -414,6 +429,12 @@ export function lintPlan(plan, options = {}) {
 
   if (plan.tasks.length > 1 && plan.reviewFocus.length === 0) {
     add('review-focus-empty', null, {});
+  }
+
+  // A plan that is mostly code has written the program instead of describing it.
+  if (plan.totalLines > 0) {
+    const percent = Math.round((plan.fenceLines / plan.totalLines) * 100);
+    if (percent > 50) add('code-block-heavy', null, { percent });
   }
 
   return findings;

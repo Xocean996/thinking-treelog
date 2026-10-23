@@ -251,5 +251,23 @@ export function formatTrace(result, context = {}) {
     : `${result.matched.length}/${result.decisionCount} decisions point at a task, ${result.unmatched.length} need a human look`;
   lines.push(summary);
 
+  if (context.proportion) {
+    const { specLines, planLines } = context.proportion;
+    const ratio = planLines / Math.max(1, specLines);
+    lines.push('');
+    lines.push(
+      zh
+        ? `篇幅：spec ${specLines} 行 → plan ${planLines} 行（${ratio.toFixed(1)}×）`
+        : `size: spec ${specLines} lines → plan ${planLines} lines (${ratio.toFixed(1)}×)`,
+    );
+    if (ratio > 3) {
+      lines.push(
+        zh
+          ? '  ⚠ 计划远长于 spec，可能写成了实现转录'
+          : '  ⚠ plan is much longer than the spec — likely a transcript, not a plan',
+      );
+    }
+  }
+
   return lines.join('\n');
 }

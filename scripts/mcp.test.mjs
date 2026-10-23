@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 import { TOOLS, callTool } from '../packages/mcp/tools.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const PLAN_MD = readFileSync(resolve(here, '../examples/superpowers-plan.md'), 'utf8');
+const SPEC_MD = readFileSync(resolve(here, '../examples/superpowers-spec.md'), 'utf8');
 
 const SAMPLE =
   '我们应该把思维树做成插件。因为用户不会为了复盘专门打开一个新网站。' +
@@ -14,15 +21,17 @@ function firstText(result) {
   return result.content[0].text;
 }
 
-test('tool catalogue exposes the six documented tools', () => {
+test('tool catalogue exposes the eight documented tools', () => {
   const names = TOOLS.map((t) => t.name).sort();
   assert.deepEqual(names, [
     'build_thought_tree',
+    'lint_plan',
     'lint_thought_tree',
     'thought_tree_adr',
     'thought_tree_markdown',
     'thought_tree_mermaid',
     'thought_tree_stats',
+    'trace_coverage',
   ]);
   for (const tool of TOOLS) {
     assert.equal(typeof tool.description, 'string');
@@ -119,6 +128,34 @@ test('thought_tree_adr renders the three sections', async () => {
   assert.match(adr, /## Context/);
   assert.match(adr, /## Decision/);
   assert.match(adr, /## Consequences/);
+});
+
+test('lint_plan reports interface drift', async () => {
+  const payload = JSON.parse(firstText(await callTool('lint_plan', { markdown: PLAN_MD })));
+
+  assert.equal(payload.tasks, 3);
+  assert.ok(payload.findings.some((f) => f.rule === 'signature-mismatch'));
+  assert.ok(payload.findings.some((f) => f.rule === 'undefined-consume'));
+  assert.equal(payload.summary.error, 2);
+});
+
+test('lint_plan rejects a document with no tasks', async () => {
+  await assert.rejects(
+    () => callTool('lint_plan', { markdown: '# just a doc\n\nsome prose' }),
+    /no tasks/i,
+  );
+});
+
+test('trace_coverage reports the decision with no task', async () => {
+  const text = firstText(await callTool('trace_coverage', { spec: SPEC_MD, plan: PLAN_MD }));
+
+  assert.match(text, /3\/4 decisions/);
+  assert.match(text, /Capture the current conversation/);
+  assert.match(text, /Task 2: Interface linter/);
+});
+
+test('trace_coverage requires both documents', async () => {
+  await assert.rejects(() => callTool('trace_coverage', { spec: SPEC_MD }), /spec.*plan|required/i);
 });
 
 test('invalid input fails loudly instead of returning junk', async () => {
