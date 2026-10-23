@@ -271,11 +271,16 @@ reviewer sees "this decision has no evidence" on the PR that introduced it.
 
 ## Screenshots
 
-| Thought tree | Node detail |
-|---|---|
-| _add `docs/screenshot-tree.png`_ | _add `docs/screenshot-node.png`_ |
+Paste a discussion, get a typed tree — and the reasoning lint runs on the result:
 
-To produce them: open the panel, press **示例** (sample), then **解析成思维树**.
+![Thought tree in the dsh panel](docs/screenshot-tree.png)
+
+Drop in a superpowers plan and the panel recognises the format, switches to the plan
+rules, and reports interface drift with line numbers:
+
+![Plan audit in the dsh panel](docs/screenshot-plan.png)
+
+Both were captured from the running panel, not mocked up.
 
 ---
 

@@ -994,17 +994,27 @@ window.__ModuleLoader__.load({
     const CSS = `
       .ttl-root {
         display: flex; flex-direction: column; height: 100%; min-height: 0;
+        width: 100%; max-width: 100%; box-sizing: border-box;
+        overflow: hidden;
         background: var(--dsw-alias-bg-base, #fff);
         color: var(--dsw-alias-label-primary, #1a1a1a);
         font-size: 13px;
       }
       .ttl-bar {
-        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-        padding: 10px 14px; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
+        display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+        padding: 8px 14px; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
         background: var(--dsw-alias-bg-layer-1, #fafafa); flex: none;
       }
+      .ttl-bar-row {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        min-width: 0; width: 100%;
+      }
+      .ttl-bar-row > * { flex-shrink: 0; }
       .ttl-title { font-weight: 600; font-size: 14px; margin-right: 4px; }
-      .ttl-sub { color: var(--dsw-alias-label-secondary, #666); font-size: 11px; }
+      .ttl-sub {
+        color: var(--dsw-alias-label-secondary, #666); font-size: 11px;
+        max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
       .ttl-spacer { flex: 1; }
       .ttl-btn {
         display: inline-flex; align-items: center; gap: 5px;
@@ -1015,9 +1025,10 @@ window.__ModuleLoader__.load({
       .ttl-btn:hover { border-color: var(--dsw-alias-border-l2, #b9bdc6); }
       .ttl-btn:disabled { opacity: .45; cursor: not-allowed; }
       .ttl-btn.primary {
-        background: var(--dsw-alias-brand-primary, #2f6feb); border-color: transparent; color: #fff;
+        background: #2f6feb; border-color: transparent; color: #fff;
       }
-      .ttl-btn.primary:hover { filter: brightness(1.06); }
+      .ttl-btn.primary:hover { filter: brightness(1.08); }
+      .ttl-btn.primary:disabled { background: #9db4e8; }
       .ttl-btn.ghost { background: transparent; border-color: transparent; }
       .ttl-input, .ttl-select, .ttl-textarea {
         border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 7px;
@@ -1025,9 +1036,10 @@ window.__ModuleLoader__.load({
         padding: 6px 8px; font-size: 12px; font-family: inherit;
       }
       .ttl-textarea { resize: vertical; line-height: 1.6; }
-      .ttl-body { display: flex; flex: 1; min-height: 0; }
+      .ttl-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
       .ttl-side {
-        width: 316px; flex: none; display: flex; flex-direction: column; min-height: 0;
+        width: 316px; flex: 0 1 316px; min-width: 240px;
+        display: flex; flex-direction: column; min-height: 0;
         border-right: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
         background: var(--dsw-alias-bg-layer-1, #fafafa);
       }
@@ -1842,55 +1854,63 @@ window.__ModuleLoader__.load({
         },
         h('style', { dangerouslySetInnerHTML: { __html: CSS } }),
 
-        // Toolbar
+        // Toolbar — two rows so nothing overflows on a narrow window.
         h(
           'div',
           { className: 'ttl-bar' },
-          h('span', { className: 'ttl-title' }, '思维树'),
-          h('span', { className: 'ttl-sub' },
-            current
-              ? `${current.title} · ${totalNodes} 节点 · ${
-                  current.extractor === 'llm'
-                    ? 'AI 提取'
-                    : current.extractor === 'plan'
-                      ? '计划解析'
-                      : '规则提取'
-                }`
-              : '尚未选择'),
-          h('span', { className: 'ttl-spacer' }),
-          h('input', {
-            className: 'ttl-input',
-            placeholder: '搜索节点…',
-            value: query,
-            style: { width: 150 },
-            onChange: (e) => setQuery(e.target.value),
-          }),
-          h('select', {
-            className: 'ttl-select',
-            value: typeFilter,
-            onChange: (e) => setTypeFilter(e.target.value),
-          },
-            h('option', { value: 'all' }, '全部类型'),
-            TYPE_ORDER.map((t) => h('option', { key: t, value: t }, TYPE_META[t].label)),
+          h(
+            'div',
+            { className: 'ttl-bar-row' },
+            h('span', { className: 'ttl-title' }, '思维树'),
+            h('span', { className: 'ttl-sub' },
+              current
+                ? `${current.title} · ${totalNodes} 节点 · ${
+                    current.extractor === 'llm'
+                      ? 'AI 提取'
+                      : current.extractor === 'plan'
+                        ? '计划解析'
+                        : '规则提取'
+                  }`
+                : '尚未选择'),
+            h('span', { className: 'ttl-spacer' }),
+            h('button', { className: 'ttl-btn ghost', onClick: () => setShowSidebar((v) => !v) },
+              showSidebar ? '收起输入' : '展开输入'),
+            h('button', { className: 'ttl-btn ghost', onClick: () => setShowSettings((v) => !v) }, '设置'),
           ),
-          h('label', { className: 'ttl-hint', style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-            '时间旅行',
+          h(
+            'div',
+            { className: 'ttl-bar-row' },
             h('input', {
-              className: 'ttl-slider',
-              type: 'range',
-              min: 0,
-              max: Math.max(1, totalNodes),
-              value: Math.min(cutoff, Math.max(1, totalNodes)),
-              onChange: (e) => setCutoff(Number(e.target.value)),
-              disabled: !totalNodes,
+              className: 'ttl-input',
+              placeholder: '搜索节点…',
+              value: query,
+              style: { width: 150 },
+              onChange: (e) => setQuery(e.target.value),
             }),
-            h('span', { style: { minWidth: 42 } },
-              `${Math.min(cutoff, totalNodes)}/${totalNodes}`),
+            h('select', {
+              className: 'ttl-select',
+              value: typeFilter,
+              onChange: (e) => setTypeFilter(e.target.value),
+            },
+              h('option', { value: 'all' }, '全部类型'),
+              TYPE_ORDER.map((t) => h('option', { key: t, value: t }, TYPE_META[t].label)),
+            ),
+            h('label', { className: 'ttl-hint', style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              '时间旅行',
+              h('input', {
+                className: 'ttl-slider',
+                type: 'range',
+                min: 0,
+                max: Math.max(1, totalNodes),
+                value: Math.min(cutoff, Math.max(1, totalNodes)),
+                onChange: (e) => setCutoff(Number(e.target.value)),
+                disabled: !totalNodes,
+              }),
+              h('span', { style: { minWidth: 42 } },
+                `${Math.min(cutoff, totalNodes)}/${totalNodes}`),
+            ),
+            h('button', { className: 'ttl-btn', onClick: () => setCutoff(totalNodes), disabled: !totalNodes }, '全部'),
           ),
-          h('button', { className: 'ttl-btn', onClick: () => setCutoff(totalNodes), disabled: !totalNodes }, '全部'),
-          h('button', { className: 'ttl-btn ghost', onClick: () => setShowSidebar((v) => !v) },
-            showSidebar ? '收起输入' : '展开输入'),
-          h('button', { className: 'ttl-btn ghost', onClick: () => setShowSettings((v) => !v) }, '设置'),
         ),
 
         h(
