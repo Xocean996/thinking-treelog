@@ -21,6 +21,16 @@ import {
 import { lintPlan, parsePlan } from '@thinking-treelog/core/plan';
 import { analyzeRhythm, formatRhythm } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
+import {
+  analyzeConversation,
+  decodeSession,
+  formatPulse,
+  listWorkspaces,
+  pickSession,
+  sessionsRoot,
+  suggestNext,
+  threadOf,
+} from '@thinking-treelog/core/workspace';
 
 export const TOOLS = [
   {
@@ -182,6 +192,30 @@ export const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'workspace_pulse',
+    description:
+      'Read the current dsh workspace from its session logs and report what this work is about: ' +
+      'the recent thread of questions, how it is being done (tool mix), unfinished todos, and ' +
+      'what to do next. Suggestions mix superpowers moves (executing-plans / writing-plans / ' +
+      'systematic-debugging) with treelog checks. Use when the user asks 梳理脉络, 我在做什么, ' +
+      '今天做到哪了, or 下一步做什么.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: {
+          type: 'string',
+          description: 'Workspace path to match. Defaults to the server working directory.',
+        },
+        sessionId: { type: 'string', description: 'Pin a specific session id.' },
+        maxThreads: {
+          type: 'number',
+          description: 'How many recent questions to show (default 8).',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 function textResult(text) {
@@ -301,6 +335,28 @@ export async function callTool(name, args = {}) {
       const limit = Number.isFinite(Number(args?.limit)) ? Number(args.limit) : 60;
       const analysis = analyzeRhythm(dir, { limit });
       return textResult(formatRhythm(analysis, { locale: 'zh' }));
+    }
+
+    case 'workspace_pulse': {
+      const workspaces = listWorkspaces(sessionsRoot());
+      if (!workspaces.length) {
+        throw new Error('no dsh session logs found under ~/.dsh/sessions');
+      }
+
+      const picked = pickSession(workspaces, {
+        cwd: typeof args?.cwd === 'string' && args.cwd.trim() ? args.cwd : process.cwd(),
+        sessionId: typeof args?.sessionId === 'string' ? args.sessionId : undefined,
+      });
+      if (!picked) throw new Error('no matching session found');
+
+      const records = decodeSession(picked.session.file, { maxFrames: 300, headFrames: 6 });
+      const analysis = analyzeConversation(records);
+      const suggestions = suggestNext(analysis);
+      const maxThreads = Number.isFinite(Number(args?.maxThreads)) ? Number(args.maxThreads) : 8;
+
+      return textResult(
+        formatPulse(analysis, suggestions, { thread: threadOf(analysis, { maxThreads }) }),
+      );
     }
 
     default:

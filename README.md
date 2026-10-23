@@ -109,6 +109,7 @@ thought_tree_adr      tree JSON → Architecture Decision Record
 lint_plan             plan markdown → interface drift, missing verification
 trace_coverage        spec + plan → which decisions have no task
 project_rhythm        git history → phases, theme mix, stall, what to pick up next
+workspace_pulse       dsh session logs → the thread of work + what to do next
 ```
 
 ### In a CI pipeline
@@ -249,6 +250,43 @@ the same reading as a thought tree; the MCP tool `project_rhythm` returns it str
 the conversation, so "梳理一下这个项目的节奏" works from chat.
 
 Non-git directories fall back to file modification times, so a scratch folder still answers.
+
+### Workspace pulse — what am I actually doing?
+
+`rhythm` reads the repo. `workspace_pulse` reads **you**: it decodes the current dsh
+session log (`~/.dsh/sessions/<workspace>/<session>/session.v4.jsonl.zstd`) and reports the
+thread of work.
+
+```
+工作区脉络 · 我现在想要做一个dsh'的插件
+  C:\Users\xuhai\Documents\deepseek-harness\default-workspace
+  35 轮 · 22 条消息 · 66 次工具调用
+  今天仍在推进
+
+在做什么（最近的提问）：
+   1. 我现在想要做一个dsh'的插件 要求极其具有创新性以及实用性…
+   2. 这一个太丑了 不遮挡项目的同时优化ui…
+   3. 不行，我的意思是这个插件可以直接梳理我当前正在做的项目的节奏
+
+怎么在做：
+  edit×35  pwsh×21  write×7  grep×1
+
+还没做完：
+  ○ 补上入口守卫
+
+建议：
+  1. ［superpowers］ 接着做完「补上入口守卫」
+  2. ［treelog］ 给这段对话留一张决策树
+```
+
+The session log is **one zstd frame per append**, so it is split on the frame magic before
+decompressing — the sync API only reads the first frame. Harness-injected reminders and
+turn timestamps are filtered out, so the thread shows what *you* asked, not what the
+runtime inserted.
+
+Suggestions are deterministic, not generated: an unfinished todo wins, no todo after
+several turns asks for a plan, a long idle gap asks you to close or drop the branch, and a
+high tool-call count suggests writing a hypothesis first. Two treelog checks ride along.
 
 ### Configuration
 

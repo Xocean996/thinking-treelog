@@ -10,7 +10,8 @@
     "./engineering": "./src/engineering.js",
     "./plan": "./src/plan.js",
     "./rhythm": "./src/rhythm.js",
-    "./trace": "./src/trace.js"
+    "./trace": "./src/trace.js",
+    "./workspace": "./src/workspace.js"
   },
   "files": ["src"],
   "scripts": {

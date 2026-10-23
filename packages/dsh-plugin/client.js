@@ -1166,6 +1166,7 @@ window.__ModuleLoader__.load({
       .ttl-root {
         --ttl-serif: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong", Georgia, serif;
         --ttl-art: linear-gradient(100deg, #8fb4ff 0%, #c9a6ff 54%, #ff9ec4 100%);
+        font-family: var(--ttl-serif);
         display: flex; flex-direction: column; height: 100%; min-height: 0;
         width: 100%; max-width: calc(100vw - 300px); min-width: 0;
         box-sizing: border-box;
