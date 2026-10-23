@@ -1164,6 +1164,8 @@ window.__ModuleLoader__.load({
 
     const CSS = `
       .ttl-root {
+        --ttl-serif: "Iowan Old Style", "Palatino Linotype", "Songti SC", "STSong", Georgia, serif;
+        --ttl-art: linear-gradient(100deg, #8fb4ff 0%, #c9a6ff 54%, #ff9ec4 100%);
         display: flex; flex-direction: column; height: 100%; min-height: 0;
         width: 100%; max-width: calc(100vw - 300px); min-width: 0;
         box-sizing: border-box;
@@ -1189,7 +1191,13 @@ window.__ModuleLoader__.load({
         min-width: 0; width: 100%;
       }
       .ttl-bar-row > * { flex-shrink: 0; }
-      .ttl-title { font-weight: 600; font-size: 14px; margin-right: 4px; }
+      .ttl-title {
+        font-family: var(--ttl-serif);
+        font-size: 15px; font-weight: 700; margin-right: 4px;
+        letter-spacing: .04em;
+        background: var(--ttl-art);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
       .ttl-sub {
         color: var(--dsw-alias-label-secondary, #666); font-size: 11px;
         max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1256,8 +1264,9 @@ window.__ModuleLoader__.load({
       }
       .ttl-side-inner { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
       .ttl-side h4 {
-        margin: 0; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
-        color: var(--dsw-alias-label-secondary, #777); font-weight: 600;
+        margin: 0; font-family: var(--ttl-serif);
+        font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+        color: var(--dsw-alias-label-secondary, #777); font-weight: 700;
         display: flex; align-items: center; gap: 6px;
       }
       .ttl-side h4::before {
@@ -1298,7 +1307,12 @@ window.__ModuleLoader__.load({
         align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary, #888);
         text-align: center; padding: 24px; pointer-events: none;
       }
-      .ttl-empty strong { color: var(--dsw-alias-label-primary, #333); font-size: 14px; }
+      .ttl-empty strong {
+        font-family: var(--ttl-serif);
+        font-size: 16px; font-weight: 700; letter-spacing: .04em;
+        background: var(--ttl-art);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
       .ttl-detail {
         width: 320px; flex: none;
         border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
@@ -1366,35 +1380,44 @@ window.__ModuleLoader__.load({
       .ttl-nav-inline button:disabled { opacity: .35; cursor: default; }
       .ttl-nav-inline button.warn { color: #e8590c; }
       .ttl-nav-inline button.on { background: #2f6feb; color: #fff; }
+      .ttl-dock-wrap {
+        display: flex; justify-content: flex-end;
+        padding: 0 14px 7px;
+        pointer-events: none;
+      }
       .ttl-dock {
-        display: flex; align-items: center; gap: 8px; margin: 0 auto 8px;
-        max-width: 760px; width: calc(100% - 32px); box-sizing: border-box;
-        padding: 8px 13px; border-radius: 13px; cursor: pointer;
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #f7f8fa) 55%, transparent);
-        backdrop-filter: blur(18px) saturate(1.35);
-        -webkit-backdrop-filter: blur(18px) saturate(1.35);
-        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 9%, transparent);
+        pointer-events: auto;
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 4px 11px 4px 9px; border-radius: 999px; cursor: pointer;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #f7f8fa) 42%, transparent);
+        backdrop-filter: blur(14px) saturate(1.35);
+        -webkit-backdrop-filter: blur(14px) saturate(1.35);
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 10%, transparent);
         box-shadow:
           inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
-          0 6px 18px rgba(0, 0, 0, 0.10);
-        font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b7280);
+          0 4px 14px rgba(0, 0, 0, 0.16);
+        font-size: 11px; line-height: 1;
+        color: var(--dsw-alias-label-secondary, #6b7280);
         transition: border-color .16s ease, box-shadow .16s ease, transform .12s ease;
       }
       .ttl-dock:hover {
         border-color: color-mix(in srgb, #2f6feb 55%, transparent);
         box-shadow:
-          inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
-          0 8px 24px rgba(47, 111, 235, 0.18);
+          inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
+          0 6px 20px rgba(47, 111, 235, 0.22);
         transform: translateY(-1px);
       }
-      .ttl-dock-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f6feb; flex: none; }
-      .ttl-dock-title {
-        color: var(--dsw-alias-label-primary, #1f2328); font-weight: 600;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
+      .ttl-dock-icon { display: flex; color: #7aa2ff; }
+      .ttl-dock-brand {
+        font-family: var(--ttl-serif);
+        font-size: 12px; font-weight: 700; letter-spacing: .05em;
+        background: var(--ttl-art);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
       }
-      .ttl-dock-sep { opacity: .5; }
-      .ttl-dock-warn { color: #e8590c; font-weight: 600; }
-      .ttl-dock-open { margin-left: auto; color: #2f6feb; font-weight: 600; white-space: nowrap; }
+      .ttl-dock-sep { opacity: .35; }
+      .ttl-dock-count { font-variant-numeric: tabular-nums; }
+      .ttl-dock-warn { color: #e8590c; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .ttl-dock-open { color: #2f6feb; font-weight: 700; }
       .ttl-nav {
         position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px;
         padding: 6px; border-radius: 12px; z-index: 3;
@@ -1478,27 +1501,46 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        {
-          className: 'ttl-dock',
-          role: 'button',
-          tabIndex: 0,
-          title: '打开思维树面板',
-          onClick: () => props.open && props.open(),
-          onKeyDown: (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              if (props.open) props.open();
-            }
+        { className: 'ttl-dock-wrap' },
+        h(
+          'div',
+          {
+            className: 'ttl-dock',
+            role: 'button',
+            tabIndex: 0,
+            title: `${latest.title} · ${latest.nodes.length} 节点${issues ? ` · ${issues} 个问题` : ''} · 打开面板`,
+            onClick: () => props.open && props.open(),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                if (props.open) props.open();
+              }
+            },
           },
-        },
-        h('span', { className: 'ttl-dock-dot' }),
-        h('span', null, '思维树'),
-        h('span', { className: 'ttl-dock-sep' }, '·'),
-        h('span', { className: 'ttl-dock-title' }, truncate(latest.title, 26)),
-        h('span', { className: 'ttl-dock-sep' }, '·'),
-        h('span', null, `${latest.nodes.length} 节点`),
-        issues ? h('span', { className: 'ttl-dock-warn' }, `${issues} 个问题`) : null,
-        h('span', { className: 'ttl-dock-open' }, '打开 →'),
+          h(
+            'span',
+            { className: 'ttl-dock-icon' },
+            h(
+              'svg',
+              {
+                width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none',
+                stroke: 'currentColor', strokeWidth: 2,
+                strokeLinecap: 'round', strokeLinejoin: 'round',
+                'aria-hidden': true,
+              },
+              h('path', { d: 'M6 3.5v17' }),
+              h('path', { d: 'M6 8h5' }),
+              h('path', { d: 'M6 16h5' }),
+              h('circle', { cx: 14.5, cy: 8, r: 2.2 }),
+              h('circle', { cx: 14.5, cy: 16, r: 2.2 }),
+            ),
+          ),
+          h('span', { className: 'ttl-dock-brand' }, '思维树'),
+          h('span', { className: 'ttl-dock-sep' }, '·'),
+          h('span', { className: 'ttl-dock-count' }, `${latest.nodes.length}`),
+          issues ? h('span', { className: 'ttl-dock-warn' }, `${issues} 问题`) : null,
+          h('span', { className: 'ttl-dock-open' }, '→'),
+        ),
       );
     }
 
