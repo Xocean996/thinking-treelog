@@ -77,10 +77,14 @@ it, branch it, and diff it.
   OpenAI-compatible endpoint for semantic extraction, with automatic fallback.
 - **Time travel.** A slider reveals nodes in reasoning order, so you can replay how the
   conclusion was built instead of jumping to the end.
+- **Result card in the conversation.** A one-line strip above the composer shows the
+  latest tree — title, node count, finding count — and opens the panel on click. You see
+  what the plugin produced without leaving the chat.
+- **Focus mode.** With a node selected, press `◉`: everything outside its path and direct
+  children drops to 10% opacity. Reading a 40-node argument stops being a squint.
 - **Fly-to navigation.** Click any node and the canvas glides to centre it. The toolbar
-  carries root / previous issue / next issue / centre / fit controls, and the arrow keys
-  walk the tree (↑ parent, ↓ child/next sibling, Home root, Enter re-centre) — so a
-  40-node argument is navigable without touching the mouse.
+  carries root / previous issue / next issue / centre / focus / fit controls, and the arrow
+  keys walk the tree (↑ parent, ↓ child/next sibling, Home root, Enter re-centre).
 - **Branch experiments.** Fork any node into a parallel branch and compare alternatives.
 - **Search + type filter.** Find "every assumption" or "where did we mention pricing".
 - **Edit in place.** Every node's label, text, type, and confidence is editable; add
@@ -279,16 +283,13 @@ reviewer sees "this decision has no evidence" on the PR that introduced it.
 
 ## Screenshots
 
-Paste a discussion, get a typed tree — and the reasoning lint runs on the result:
+Paste a discussion, get a typed tree — node cards carry the type colour as a spine and a
+wash, links inherit the child's type, and the reasoning lint runs on the result:
 
 ![Thought tree in the dsh panel](docs/screenshot-tree.png)
 
-Drop in a superpowers plan and the panel recognises the format, switches to the plan
-rules, and reports interface drift with line numbers:
-
-![Plan audit in the dsh panel](docs/screenshot-plan.png)
-
-Both were captured from the running panel, not mocked up.
+A superpowers plan is recognised by its `### Task` structure; the panel switches to the
+plan rules and reports interface drift with line numbers (see the CLI output below).
 
 ---
 

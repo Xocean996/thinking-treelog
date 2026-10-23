@@ -75,6 +75,14 @@ window.__ModuleLoader__.load({
     const cx = (...parts) => parts.filter(Boolean).join(' ');
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+    /** #rrggbb -> rgba() so node tints work in both themes. */
+    function withAlpha(hex, alpha) {
+      const value = String(hex).replace('#', '');
+      if (value.length !== 6) return `rgba(120, 130, 150, ${alpha})`;
+      const n = parseInt(value, 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+    }
+
     function uid(prefix) {
       return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     }
@@ -1318,6 +1326,28 @@ window.__ModuleLoader__.load({
       .ttl-nav-inline button:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, #eef0f3); }
       .ttl-nav-inline button:disabled { opacity: .35; cursor: default; }
       .ttl-nav-inline button.warn { color: #e8590c; }
+      .ttl-nav-inline button.on { background: #2f6feb; color: #fff; }
+      .ttl-dock {
+        display: flex; align-items: center; gap: 8px; margin: 0 auto 8px;
+        max-width: 760px; width: calc(100% - 32px); box-sizing: border-box;
+        padding: 7px 12px; border-radius: 11px; cursor: pointer;
+        background: var(--dsw-alias-bg-layer-1, #f7f8fa);
+        border: 1px solid var(--dsw-alias-border-l1, #e2e5ea);
+        font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b7280);
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      .ttl-dock:hover {
+        border-color: #2f6feb;
+        box-shadow: 0 2px 10px rgba(47,111,235,.16);
+      }
+      .ttl-dock-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f6feb; flex: none; }
+      .ttl-dock-title {
+        color: var(--dsw-alias-label-primary, #1f2328); font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
+      }
+      .ttl-dock-sep { opacity: .5; }
+      .ttl-dock-warn { color: #e8590c; font-weight: 600; }
+      .ttl-dock-open { margin-left: auto; color: #2f6feb; font-weight: 600; white-space: nowrap; }
       .ttl-nav {
         position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px;
         padding: 6px; border-radius: 12px; z-index: 3;
@@ -1364,13 +1394,75 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Composer dock — the plugin's result, visible inside the chat
+     * ------------------------------------------------------------------ */
+
+    /**
+     * A one-line summary of the latest thought tree, rendered under the composer
+     * so you can see what the plugin produced without leaving the conversation.
+     */
+    function DockBar(props) {
+      const [trees, setTrees] = useState(() => loadTrees());
+
+      useEffect(() => {
+        const refresh = () => setTrees(loadTrees());
+        window.addEventListener('ttl:trees', refresh);
+        window.addEventListener('storage', refresh);
+        return () => {
+          window.removeEventListener('ttl:trees', refresh);
+          window.removeEventListener('storage', refresh);
+        };
+      }, []);
+
+      const latest = trees[0];
+      const issues = useMemo(() => {
+        if (!latest || !latest.nodes || !latest.nodes.length) return 0;
+        try {
+          if (latest.extractor === 'plan') {
+            return lintPlanClient(parsePlanClient(latest.source || '')).length;
+          }
+          return lintTree(latest.nodes).length;
+        } catch (error) {
+          return 0;
+        }
+      }, [latest]);
+
+      if (!latest) return null;
+
+      return h(
+        'div',
+        {
+          className: 'ttl-dock',
+          role: 'button',
+          tabIndex: 0,
+          title: '打开思维树面板',
+          onClick: () => props.open && props.open(),
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              if (props.open) props.open();
+            }
+          },
+        },
+        h('span', { className: 'ttl-dock-dot' }),
+        h('span', null, '思维树'),
+        h('span', { className: 'ttl-dock-sep' }, '·'),
+        h('span', { className: 'ttl-dock-title' }, truncate(latest.title, 26)),
+        h('span', { className: 'ttl-dock-sep' }, '·'),
+        h('span', null, `${latest.nodes.length} 节点`),
+        issues ? h('span', { className: 'ttl-dock-warn' }, `${issues} 个问题`) : null,
+        h('span', { className: 'ttl-dock-open' }, '打开 →'),
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
      * Tree canvas
      * ------------------------------------------------------------------ */
 
     function TreeCanvas(props) {
       const {
         nodes, selectedId, onSelect, query, typeFilter, cutoff,
-        onAddChild, layoutRef, findings, apiRef,
+        onAddChild, layoutRef, findings, apiRef, focusMode,
       } = props;
 
       const svgRef = useRef(null);
@@ -1419,6 +1511,14 @@ window.__ModuleLoader__.load({
         if (!selectedId) return new Set();
         return new Set(pathTo(layout.graph, selectedId).map((n) => n.id));
       }, [layout.graph, selectedId]);
+
+      // Focus mode keeps the selected path and its immediate children lit.
+      const focusedIds = useMemo(() => {
+        if (!focusMode || !selectedId) return null;
+        const set = new Set(highlightIds);
+        for (const childId of layout.graph.childrenOf.get(selectedId) || []) set.add(childId);
+        return set;
+      }, [focusMode, selectedId, highlightIds, layout.graph]);
 
       const q = String(query || '').trim().toLowerCase();
       const matches = useCallback(
@@ -1612,14 +1712,15 @@ window.__ModuleLoader__.load({
             layout.links.map((link) => {
               const onPath = highlightIds.has(link.target.node.id) && highlightIds.has(link.source.node.id);
               const dim = !visibleIds.has(link.target.node.id) || !matches(link.target.node);
+              const linkColor = (TYPE_META[link.target.node.type] || TYPE_META.claim).color;
               return h('path', {
                 key: link.id,
                 d: link.d,
                 fill: 'none',
-                stroke: onPath ? '#2f6feb' : 'var(--dsw-alias-border-l2, #c6cad2)',
-                strokeWidth: onPath ? 2.4 : 1.4,
+                stroke: onPath ? '#2f6feb' : withAlpha(linkColor, dim ? 0.12 : 0.42),
+                strokeWidth: onPath ? 2.2 : 1.2,
                 strokeDasharray: dim ? '4 5' : undefined,
-                opacity: dim ? 0.35 : 0.9,
+                opacity: dim ? 0.4 : 0.95,
               });
             }),
           ),
@@ -1635,20 +1736,19 @@ window.__ModuleLoader__.load({
               const hit = matches(node);
               const rejected = node.status === 'rejected';
               const accepted = node.status === 'accepted';
-
-              const fill = rejected
-                ? 'var(--dsw-alias-bg-layer-2, #e9ebef)'
-                : visible
-                  ? meta.color
-                  : 'var(--dsw-alias-bg-layer-2, #e9ebef)';
-              const textColor = rejected || !visible ? 'var(--dsw-alias-label-secondary, #888)' : '#fff';
+              const muted = !visible || rejected;
+              const dimmed = focusedIds && !focusedIds.has(node.id);
 
               return h(
                 'g',
                 {
                   key: node.id,
                   transform: `translate(${entry.x}, ${entry.y})`,
-                  style: { cursor: 'pointer', opacity: hit ? 1 : 0.28, transition: 'opacity .18s' },
+                  style: {
+                    cursor: 'pointer',
+                    opacity: hit ? (dimmed ? 0.1 : 1) : 0.22,
+                    transition: 'opacity .2s ease',
+                  },
                   onClick: (event) => {
                     if (drag && drag.moved) return;
                     event.stopPropagation();
@@ -1659,45 +1759,51 @@ window.__ModuleLoader__.load({
                     if (onAddChild) onAddChild(node.id);
                   },
                 },
+                // Card surface, then a colour wash, then the border.
                 h('rect', {
-                  width: NODE_W,
-                  height: NODE_H,
-                  rx: 10,
-                  fill,
+                  width: NODE_W, height: NODE_H, rx: 12,
+                  fill: 'var(--dsw-alias-bg-layer-1, #16181d)',
                   filter: selected ? 'url(#ttl-glow)' : 'url(#ttl-shadow)',
-                  stroke: selected
-                    ? '#111'
-                    : rejected
-                      ? '#e03131'
-                      : accepted
-                        ? '#0ca678'
-                        : onPath
-                          ? 'rgba(47,111,235,.85)'
-                          : 'transparent',
-                  strokeWidth: selected ? 2.4 : rejected || accepted ? 1.8 : onPath ? 1.6 : 0,
-                  strokeDasharray: rejected ? '5 4' : undefined,
-                  opacity: visible ? 1 : 0.85,
                 }),
-                h(
-                  'text',
-                  {
-                    x: 12, y: 24, fill: textColor,
-                    fontSize: 12.5, fontWeight: 600,
-                    style: { pointerEvents: 'none' },
-                  },
-                  truncate(node.label, 13),
-                ),
-                h(
-                  'text',
-                  {
-                    x: 12, y: 43, fill: textColor, opacity: visible ? 0.85 : 0.7,
-                    fontSize: 10.5, style: { pointerEvents: 'none' },
-                  },
-                  `${meta.label} · ${Math.round(node.confidence * 100)}%`,
-                ),
+                h('rect', {
+                  width: NODE_W, height: NODE_H, rx: 12,
+                  fill: withAlpha(meta.color, muted ? 0.05 : 0.17),
+                }),
+                h('rect', {
+                  width: NODE_W, height: NODE_H, rx: 12, fill: 'none',
+                  stroke: rejected ? '#e03131' : withAlpha(meta.color, selected ? 1 : muted ? 0.2 : 0.45),
+                  strokeWidth: selected ? 2 : 1.1,
+                  strokeDasharray: rejected ? '5 4' : undefined,
+                }),
+                // Type spine.
+                h('rect', {
+                  x: 0, y: 11, width: 3.5, height: NODE_H - 22, rx: 2,
+                  fill: meta.color, opacity: muted ? 0.45 : 1,
+                }),
+                h('text', {
+                  x: 14, y: 26,
+                  fill: 'var(--dsw-alias-label-primary, #eceff4)',
+                  fontSize: 12.5, fontWeight: 600,
+                  style: { pointerEvents: 'none' },
+                }, truncate(node.label, 13)),
+                h('text', {
+                  x: 14, y: 44,
+                  fill: withAlpha(meta.color, muted ? 0.65 : 0.95),
+                  fontSize: 10, fontWeight: 600,
+                  style: { pointerEvents: 'none' },
+                }, meta.label),
+                h('text', {
+                  x: 14 + meta.label.length * 10.5 + 7, y: 44,
+                  fill: 'var(--dsw-alias-label-secondary, #8b93a1)',
+                  fontSize: 9.5,
+                  style: { pointerEvents: 'none' },
+                }, `${Math.round(node.confidence * 100)}%`),
+                accepted
+                  ? h('circle', { cx: NODE_W - 11, cy: 11, r: 3.2, fill: '#0ca678' })
+                  : null,
                 node.branchId && node.branchId !== DEFAULT_BRANCH
                   ? h('circle', {
-                      cx: NODE_W - 10, cy: 10, r: 4,
+                      cx: NODE_W - 11, cy: 11, r: 3.2,
                       fill: BRANCH_PALETTE[Math.abs(hashCode(node.branchId)) % BRANCH_PALETTE.length],
                     })
                   : null,
@@ -1942,6 +2048,7 @@ window.__ModuleLoader__.load({
       const [cutoff, setCutoff] = useState(9999);
       const [showSettings, setShowSettings] = useState(false);
       const [showSidebar, setShowSidebar] = useState(true);
+      const [focusMode, setFocusMode] = useState(false);
 
       const layoutRef = useRef(null);
       const canvasApi = useRef(null);
@@ -1976,6 +2083,7 @@ window.__ModuleLoader__.load({
       const persist = useCallback((next) => {
         setTrees(next);
         writeJson(TREES_KEY, next);
+        window.dispatchEvent(new CustomEvent('ttl:trees'));
       }, []);
 
       const patchCurrent = useCallback(
@@ -1985,6 +2093,7 @@ window.__ModuleLoader__.load({
               t.id === currentId ? { ...t, ...patch, updatedAt: Date.now() } : t,
             );
             writeJson(TREES_KEY, next);
+            window.dispatchEvent(new CustomEvent('ttl:trees'));
             return next;
           });
         },
@@ -2346,6 +2455,11 @@ window.__ModuleLoader__.load({
                 onClick: () => canvasApi.current && canvasApi.current.focusNode(selectedId, true),
               }, '◎'),
               h('button', {
+                title: '聚焦模式：只亮当前路径和直接子节点',
+                className: focusMode ? 'on' : '',
+                onClick: () => setFocusMode((v) => !v),
+              }, '◉'),
+              h('button', {
                 title: '适应画布',
                 onClick: () => canvasApi.current && canvasApi.current.fitAll(),
               }, '⤢'),
@@ -2536,6 +2650,7 @@ window.__ModuleLoader__.load({
             layoutRef,
             findings,
             apiRef: canvasApi,
+            focusMode,
           }),
 
           // Detail
@@ -2585,8 +2700,18 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots'],
+      inject: ['slots', 'layout'],
       apply(ctx) {
+        const openPanel = () => {
+          try {
+            if (ctx.layout && typeof ctx.layout.selectPanel === 'function') {
+              ctx.layout.selectPanel('thinking-treelog');
+            }
+          } catch (error) {
+            /* the panel button in the sidebar still works */
+          }
+        };
+
         ctx.slots.inject('sidebar.panellist', () =>
           ctx.slots.register(
             {
@@ -2603,6 +2728,21 @@ window.__ModuleLoader__.load({
           ctx.slots.register(
             { name: 'main', key: 'thinking-treelog' },
             Panel,
+          ),
+        );
+
+        // A one-line result card above the composer, inside the conversation.
+        // (`composer.dock` sits below the composer card, which has no room at the
+        // bottom of the window; `input.dock` is the full-width strip above it.)
+        ctx.slots.inject('conversation.input.dock', () =>
+          ctx.slots.register(
+            {
+              name: 'conversation.input.dock',
+              id: 'thinking-treelog-dock',
+              order: 40,
+              label: () => '思维树',
+            },
+            () => h(DockBar, { open: openPanel }),
           ),
         );
       },
