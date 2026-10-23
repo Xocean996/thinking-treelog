@@ -14,10 +14,12 @@ function firstText(result) {
   return result.content[0].text;
 }
 
-test('tool catalogue exposes the four documented tools', () => {
+test('tool catalogue exposes the six documented tools', () => {
   const names = TOOLS.map((t) => t.name).sort();
   assert.deepEqual(names, [
     'build_thought_tree',
+    'lint_thought_tree',
+    'thought_tree_adr',
     'thought_tree_markdown',
     'thought_tree_mermaid',
     'thought_tree_stats',
@@ -80,6 +82,43 @@ test('stats reports structure', async () => {
   assert.ok(stats.branchCount >= 2);
   assert.ok(stats.averageConfidence > 0);
   assert.ok(Array.isArray(stats.lowConfidence));
+});
+
+test('lint_thought_tree reports gaps and a severity summary', async () => {
+  const built = JSON.parse(firstText(await callTool('build_thought_tree', { text: SAMPLE })));
+  const payload = JSON.parse(firstText(await callTool('lint_thought_tree', { tree: built })));
+
+  assert.ok(Array.isArray(payload.findings));
+  assert.equal(typeof payload.summary.error, 'number');
+  assert.equal(typeof payload.summary.warning, 'number');
+
+  for (const finding of payload.findings) {
+    assert.ok(typeof finding.rule === 'string');
+    assert.ok(['error', 'warning', 'info'].includes(finding.severity));
+    assert.ok(typeof finding.message === 'string' && finding.message.length > 0);
+  }
+});
+
+test('lint_thought_tree flags a bare conclusion', async () => {
+  const payload = JSON.parse(
+    firstText(
+      await callTool('lint_thought_tree', {
+        nodes: [{ id: 'a', parentId: null, text: '直接上线', type: 'conclusion', confidence: 0.9 }],
+      }),
+    ),
+  );
+  assert.ok(payload.findings.some((f) => f.rule === 'conclusion-without-evidence'));
+  assert.equal(payload.summary.error, 1);
+});
+
+test('thought_tree_adr renders the three sections', async () => {
+  const built = JSON.parse(firstText(await callTool('build_thought_tree', { text: SAMPLE })));
+  const adr = firstText(await callTool('thought_tree_adr', { tree: built, id: '0012' }));
+
+  assert.match(adr, /^# 0012\./m);
+  assert.match(adr, /## Context/);
+  assert.match(adr, /## Decision/);
+  assert.match(adr, /## Consequences/);
 });
 
 test('invalid input fails loudly instead of returning junk', async () => {

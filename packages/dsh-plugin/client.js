@@ -25,6 +25,9 @@ window.__ModuleLoader__.load({
 
     const DEFAULT_BRANCH = 'main';
 
+    /** Decision lifecycle states carried through normalisation for lint/ADR use. */
+    const STATUS_SET = new Set(['proposed', 'accepted', 'rejected', 'superseded']);
+
     const TYPE_ORDER = [
       'question',
       'claim',
@@ -47,6 +50,13 @@ window.__ModuleLoader__.load({
 
     const BRANCH_PALETTE = ['#2f6feb', '#e8590c', '#0ca678', '#9c36b5', '#c2255c', '#5c7cfa'];
     const MAIN_BRANCH_COLOR = '#6b7280';
+
+    const STATUS_LABELS = {
+      proposed: '提议中',
+      accepted: '已采纳',
+      rejected: '已否决',
+      superseded: '已被取代',
+    };
 
     const TREES_KEY = 'ttl.trees.v1';
     const SETTINGS_KEY = 'ttl.settings.v1';
@@ -234,6 +244,20 @@ window.__ModuleLoader__.load({
         if (!text) return;
 
         const branchRaw = typeof item.branchId === 'string' && item.branchId ? item.branchId : DEFAULT_BRANCH;
+
+        // Engineering metadata survives a round-trip so lint/ADR export work.
+        const extra = {};
+        if (typeof item.status === 'string' && STATUS_SET.has(item.status)) extra.status = item.status;
+        if (typeof item.owner === 'string' && item.owner.trim()) extra.owner = item.owner.trim();
+        if (item.isSection === true) extra.isSection = true;
+        if (Array.isArray(item.refs)) {
+          const refs = item.refs
+            .filter((r) => typeof r === 'string' && r.trim())
+            .map((r) => r.trim())
+            .slice(0, 10);
+          if (refs.length) extra.refs = refs;
+        }
+
         staged.push({
           id,
           parentId:
@@ -249,6 +273,7 @@ window.__ModuleLoader__.load({
           tags: Array.isArray(item.tags)
             ? item.tags.filter((t) => typeof t === 'string' && t.trim()).slice(0, 3)
             : extractTags(text),
+          ...extra,
         });
       });
 
@@ -555,6 +580,120 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Reasoning lint (mirror of @thinking-treelog/core/engineering)
+     * ------------------------------------------------------------------ */
+
+    const LINT_RULES = {
+      'conclusion-without-evidence': { severity: 'error', text: '结论没有任何论据支撑' },
+      'assumption-unverified': { severity: 'warning', text: '假设没有被验证，也没有对应的行动' },
+      'rejected-with-descendants': { severity: 'warning', text: '已否决的方案仍在承载子节点' },
+      'superseded-without-reference': { severity: 'info', text: '被取代的决策没有记录取代者' },
+      'low-confidence-conclusion': { severity: 'warning', text: '结论的置信度偏低' },
+      'depth-exceeds': { severity: 'warning', text: '决策链过深' },
+      'orphan-node': { severity: 'error', text: '节点无法从任何根节点到达' },
+    };
+
+    function hasDescendantOfType(graph, id, types) {
+      const wanted = new Set(types);
+      return descendantsOf(graph, id).some((childId) => wanted.has((graph.nodeMap.get(childId) || {}).type));
+    }
+
+    function lintTree(nodes, options) {
+      const opts = options || {};
+      const maxDepth = opts.maxDepth == null ? 8 : opts.maxDepth;
+      const minConfidence = opts.minConclusionConfidence == null ? 0.5 : opts.minConclusionConfidence;
+      const findings = [];
+      if (!nodes.length) return findings;
+
+      const graph = buildGraph(nodes);
+      const reachable = new Set(graph.order);
+
+      const add = (rule, nodeId, message, hint) => {
+        const meta = LINT_RULES[rule];
+        findings.push({
+          rule,
+          severity: meta.severity,
+          message,
+          hint,
+          nodeId: nodeId || null,
+          nodeLabel: nodeId && graph.nodeMap.get(nodeId) ? graph.nodeMap.get(nodeId).label : '',
+        });
+      };
+
+      nodes.forEach((node) => {
+        const kids = graph.childrenOf.get(node.id) || [];
+
+        if (!reachable.has(node.id)) {
+          add('orphan-node', node.id, `节点「${node.label}」无法从根节点到达`);
+        }
+
+        if (node.type === 'conclusion' && !hasDescendantOfType(graph, node.id, ['evidence'])) {
+          add(
+            'conclusion-without-evidence',
+            node.id,
+            `结论「${node.label}」没有任何论据节点`,
+            '给它补一个 evidence 子节点，或者把它降级成 claim',
+          );
+        }
+
+        if (node.type === 'assumption' && !hasDescendantOfType(graph, node.id, ['evidence', 'action'])) {
+          add('assumption-unverified', node.id, `假设「${node.label}」没有验证动作`, '补一个 action 节点说明怎么验证它');
+        }
+
+        if (node.status === 'rejected' && kids.length > 0) {
+          add(
+            'rejected-with-descendants',
+            node.id,
+            `已否决的「${node.label}」仍有 ${kids.length} 个子节点`,
+            '把这些子节点挂到仍然有效的方案下',
+          );
+        }
+
+        if (node.status === 'superseded' && !(node.refs || []).length) {
+          add(
+            'superseded-without-reference',
+            node.id,
+            `被取代的「${node.label}」没有记录取代者`,
+            '在 refs 里写入取代它的节点 id 或文档链接',
+          );
+        }
+
+        if (node.type === 'conclusion' && node.confidence < minConfidence) {
+          add('low-confidence-conclusion', node.id, `结论「${node.label}」置信度只有 ${Math.round(node.confidence * 100)}%`);
+        }
+
+        const depth = pathTo(graph, node.id).length - 1;
+        if (depth > maxDepth) {
+          add('depth-exceeds', node.id, `决策链深度 ${depth} 超过上限 ${maxDepth}`);
+        }
+      });
+
+      return findings;
+    }
+
+    function treeToAdr(tree) {
+      const graph = buildGraph(tree.nodes);
+      const nodes = tree.nodes;
+      const context = nodes.filter((n) => !n.isSection && ['question', 'assumption', 'constraint'].indexOf(n.type) >= 0);
+      const decision = nodes.filter((n) => !n.isSection && n.type === 'conclusion');
+      const consequences = nodes.filter((n) => !n.isSection && n.type === 'action');
+      const section = (heading, items, empty) =>
+        [`## ${heading}`, '', ...(items.length ? items.map((n) => `- ${n.text}`) : [empty]), ''].join('\n');
+
+      return [
+        `# 0001. ${tree.title}`,
+        '',
+        '- **Status:** Proposed',
+        `- **Date:** ${new Date().toISOString().slice(0, 10)}`,
+        '',
+        section('Context', context, '_没有识别到背景或约束节点。_'),
+        section('Decision', decision, '_没有识别到结论节点。_'),
+        section('Consequences', consequences, '_没有识别到后果或行动节点。_'),
+        `- Generated by Thinking TreeLog (${graph.roots.length} roots, ${nodes.length} nodes)`,
+      ].join('\n');
+    }
+
+    /* ------------------------------------------------------------------ *
      * Persistence
      * ------------------------------------------------------------------ */
 
@@ -685,6 +824,19 @@ window.__ModuleLoader__.load({
       }
       .ttl-chip.on { background: var(--dsw-alias-brand-primary, #2f6feb); border-color: transparent; color: #fff; }
       .ttl-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--dsw-alias-label-secondary, #888); }
+      .ttl-lints { display: flex; flex-direction: column; gap: 4px; }
+      .ttl-lint {
+        display: flex; flex-direction: column; gap: 1px; padding: 5px 7px;
+        border-radius: 6px; border-left: 3px solid var(--dsw-alias-border-l2, #adb5bd);
+        cursor: pointer; background: var(--dsw-alias-bg-base, #fff);
+        font-size: 11px; line-height: 1.45;
+      }
+      .ttl-lint:hover { background: var(--dsw-alias-bg-layer-2, #f0f1f3); }
+      .ttl-lint.error { border-left-color: var(--dsw-alias-state-error-primary, #e03131); }
+      .ttl-lint.warning { border-left-color: var(--dsw-alias-state-warn-primary, #f08c00); }
+      .ttl-lint.info { border-left-color: var(--dsw-alias-brand-primary, #1c7ed6); }
+      .ttl-lint-rule { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 9.5px; color: var(--dsw-alias-label-secondary, #888); }
+      .ttl-lint-msg { color: var(--dsw-alias-label-primary, #333); }
       .ttl-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; }
       .ttl-settings { display: flex; flex-direction: column; gap: 8px; }
       .ttl-settings label { font-size: 11px; color: var(--dsw-alias-label-secondary, #777); }
@@ -872,9 +1024,15 @@ window.__ModuleLoader__.load({
               const onPath = highlightIds.has(node.id);
               const visible = visibleIds.has(node.id);
               const hit = matches(node);
+              const rejected = node.status === 'rejected';
+              const accepted = node.status === 'accepted';
 
-              const fill = visible ? meta.color : 'var(--dsw-alias-bg-layer-2, #e9ebef)';
-              const textColor = visible ? '#fff' : 'var(--dsw-alias-label-secondary, #888)';
+              const fill = rejected
+                ? 'var(--dsw-alias-bg-layer-2, #e9ebef)'
+                : visible
+                  ? meta.color
+                  : 'var(--dsw-alias-bg-layer-2, #e9ebef)';
+              const textColor = rejected || !visible ? 'var(--dsw-alias-label-secondary, #888)' : '#fff';
 
               return h(
                 'g',
@@ -897,8 +1055,17 @@ window.__ModuleLoader__.load({
                   height: NODE_H,
                   rx: 9,
                   fill,
-                  stroke: selected ? '#111' : onPath ? 'rgba(47,111,235,.85)' : 'transparent',
-                  strokeWidth: selected ? 2.4 : onPath ? 1.6 : 0,
+                  stroke: selected
+                    ? '#111'
+                    : rejected
+                      ? '#e03131'
+                      : accepted
+                        ? '#0ca678'
+                        : onPath
+                          ? 'rgba(47,111,235,.85)'
+                          : 'transparent',
+                  strokeWidth: selected ? 2.4 : rejected || accepted ? 1.8 : onPath ? 1.6 : 0,
+                  strokeDasharray: rejected ? '5 4' : undefined,
                   opacity: visible ? 1 : 0.85,
                 }),
                 h(
@@ -1035,6 +1202,14 @@ window.__ModuleLoader__.load({
           ),
         ),
 
+        h('label', { className: 'ttl-hint' }, '决策状态'),
+        h('select', {
+          className: 'ttl-select',
+          value: node.status || 'proposed',
+          onChange: (e) => onUpdate(node.id, { status: e.target.value }),
+        }, ['proposed', 'accepted', 'rejected', 'superseded'].map((status) =>
+            h('option', { key: status, value: status }, STATUS_LABELS[status]))),
+
         node.tags && node.tags.length
           ? h('div', { className: 'ttl-chips' },
               node.tags.map((tag) => h('span', { key: tag, className: 'ttl-chip' }, tag)))
@@ -1146,6 +1321,8 @@ window.__ModuleLoader__.load({
       const nodes = current ? current.nodes : [];
       const graph = useMemo(() => buildGraph(nodes), [nodes]);
       const selected = selectedId ? graph.nodeMap.get(selectedId) : null;
+      const findings = useMemo(() => (nodes.length ? lintTree(nodes) : []), [nodes]);
+      const errorCount = findings.filter((f) => f.severity === 'error').length;
 
       useEffect(() => {
         writeJson(SETTINGS_KEY, settings);
@@ -1337,6 +1514,11 @@ window.__ModuleLoader__.load({
         download(`${current.title.replace(/[\\/:*?"<>|]/g, '_')}.mmd`, treeToMermaid(current), 'text/plain');
       };
 
+      const exportAdr = () => {
+        if (!current) return;
+        download(`${current.title.replace(/[\\/:*?"<>|]/g, '_')}.adr.md`, treeToAdr(current), 'text/markdown');
+      };
+
       const copyMarkdown = async () => {
         if (!current) return;
         try {
@@ -1468,6 +1650,26 @@ window.__ModuleLoader__.load({
                         ),
                       ),
 
+                  h('h4', null, `推理检查${findings.length ? ` · ${findings.length}` : ''}`),
+                  findings.length === 0
+                    ? h('div', { className: 'ttl-hint' }, nodes.length ? '✔ 没有发现推理缺口' : '生成思维树后自动检查')
+                    : h('div', { className: 'ttl-lints' },
+                        findings.slice(0, 8).map((finding) =>
+                          h('div', {
+                            key: `${finding.rule}:${finding.nodeId}`,
+                            className: cx('ttl-lint', finding.severity),
+                            title: finding.hint || '',
+                            onClick: () => { if (finding.nodeId) setSelectedId(finding.nodeId); },
+                          },
+                            h('span', { className: 'ttl-lint-rule' }, finding.rule),
+                            h('span', { className: 'ttl-lint-msg' }, finding.message),
+                          ),
+                        ),
+                        findings.length > 8
+                          ? h('div', { className: 'ttl-hint' }, `还有 ${findings.length - 8} 条…`)
+                          : null,
+                      ),
+
                   h('div', { className: 'ttl-legend' },
                     TYPE_ORDER.map((type) =>
                       h('span', { key: type },
@@ -1481,6 +1683,7 @@ window.__ModuleLoader__.load({
                     h('button', { className: 'ttl-btn', style: { margin: '0 4px' }, onClick: exportMarkdown, disabled: !current }, 'Markdown'),
                     h('button', { className: 'ttl-btn', style: { margin: '0 4px' }, onClick: exportMermaid, disabled: !current }, 'Mermaid'),
                     h('button', { className: 'ttl-btn', style: { margin: '0 4px' }, onClick: exportJson, disabled: !current }, 'JSON'),
+                    h('button', { className: 'ttl-btn', style: { margin: '0 4px' }, onClick: exportAdr, disabled: !current }, 'ADR'),
                     h('button', { className: 'ttl-btn', style: { margin: '0 4px' }, onClick: copyMarkdown, disabled: !current }, '复制'),
                   ),
                 ),
@@ -1534,6 +1737,8 @@ window.__ModuleLoader__.load({
         computeLayout,
         treeToMarkdown,
         treeToMermaid,
+        lintTree,
+        treeToAdr,
       };
     }
 

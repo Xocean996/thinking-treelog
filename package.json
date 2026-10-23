@@ -1,20 +1,23 @@
 {
   "name": "thinking-treelog",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Turn any conversation into a navigable, branchable thought tree — as a dsh plugin, an MCP server, and a reusable engine.",
+  "description": "Turn any conversation into a navigable, branchable thought tree — as a dsh plugin, an MCP server, a CI lint, and a reusable engine.",
   "license": "MIT",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test:core && npm run test:consistency && npm run test:client",
+    "test": "npm run test:core && npm run test:engineering && npm run test:consistency && npm run test:client && npm run test:mcp",
     "test:core": "node packages/core/test/core.test.js",
+    "test:engineering": "node scripts/engineering.test.mjs",
     "test:consistency": "node scripts/consistency.test.mjs",
     "test:client": "node scripts/smoke-client.mjs",
     "test:mcp": "node scripts/mcp.test.mjs",
-    "verify": "npm run test:core && npm run test:consistency && npm run test:client && npm run test:mcp"
+    "verify": "npm run test:core && npm run test:engineering && npm run test:consistency && npm run test:client && npm run test:mcp",
+    "treelog": "node packages/cli/bin/treelog.mjs",
+    "lint:docs": "node packages/cli/bin/treelog.mjs lint examples/*.md"
   },
   "engines": {
     "node": ">=18"

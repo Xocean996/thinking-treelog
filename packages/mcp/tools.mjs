@@ -12,6 +12,7 @@ import {
   toMarkdown,
   toMermaid,
 } from '@thinking-treelog/core';
+import { lintTree, summarizeFindings, toAdr } from '@thinking-treelog/core/engineering';
 
 export const TOOLS = [
   {
@@ -75,6 +76,43 @@ export const TOOLS = [
       additionalProperties: true,
     },
   },
+  {
+    name: 'lint_thought_tree',
+    description:
+      'Check a thought tree for reasoning gaps: conclusions with no evidence, unverified ' +
+      'assumptions, rejected options that still carry children, over-deep chains. ' +
+      'Use this before treating a plan as settled.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tree: { type: 'object' },
+        nodes: { type: 'array' },
+        maxDepth: { type: 'number', description: 'Maximum decision-chain depth (default 8).' },
+        minConclusionConfidence: {
+          type: 'number',
+          description: 'Minimum confidence for a conclusion (default 0.5).',
+        },
+      },
+      additionalProperties: true,
+    },
+  },
+  {
+    name: 'thought_tree_adr',
+    description:
+      'Render a thought tree as an Architecture Decision Record with Context / Decision / ' +
+      'Consequences sections.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tree: { type: 'object' },
+        nodes: { type: 'array' },
+        title: { type: 'string' },
+        id: { type: 'string', description: 'ADR number, e.g. "0007".' },
+        status: { type: 'string', description: 'Proposed | Accepted | Rejected | Superseded.' },
+      },
+      additionalProperties: true,
+    },
+  },
 ];
 
 function textResult(text) {
@@ -123,6 +161,32 @@ export async function callTool(name, args = {}) {
     case 'thought_tree_stats': {
       const nodes = asNodes(args);
       return textResult(JSON.stringify(analyzeTree({ title: asTitle(args, nodes), nodes }), null, 2));
+    }
+
+    case 'lint_thought_tree': {
+      const nodes = asNodes(args);
+      const findings = lintTree(nodes, {
+        maxDepth: Number.isFinite(Number(args.maxDepth)) ? Number(args.maxDepth) : undefined,
+        minConclusionConfidence: Number.isFinite(Number(args.minConclusionConfidence))
+          ? Number(args.minConclusionConfidence)
+          : undefined,
+      });
+      return textResult(
+        JSON.stringify({ summary: summarizeFindings(findings), findings }, null, 2),
+      );
+    }
+
+    case 'thought_tree_adr': {
+      const nodes = asNodes(args);
+      return textResult(
+        toAdr(
+          { title: asTitle(args, nodes), nodes, extractor: 'rule' },
+          {
+            id: typeof args.id === 'string' ? args.id : undefined,
+            status: typeof args.status === 'string' ? args.status : undefined,
+          },
+        ),
+      );
     }
 
     default:

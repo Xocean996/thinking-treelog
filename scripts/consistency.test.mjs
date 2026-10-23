@@ -12,6 +12,7 @@ import {
   toMarkdown,
   toMermaid,
 } from '../packages/core/src/index.js';
+import { lintTree } from '../packages/core/src/engineering.js';
 
 /**
  * The dsh Client half is a self-contained browser module, so it carries its own
@@ -133,4 +134,19 @@ test('client and core agree on Markdown and Mermaid exports', () => {
     assert.equal(internals.treeToMarkdown(clientTree), toMarkdown(tree));
     assert.equal(internals.treeToMermaid(clientTree), toMermaid(tree));
   }
+});
+
+test('client and core agree on reasoning lint findings', () => {
+  for (const fixture of FIXTURES.slice(0, 3)) {
+    const nodes = extractWithRules(fixture);
+    assert.deepEqual(internals.lintTree(nodes), lintTree(nodes), 'lint findings diverged');
+  }
+
+  // Also cover the engineering metadata that only the panel can set.
+  const withStatus = normalizeNodes([
+    { id: 'a', parentId: null, text: '采用方案 A', type: 'conclusion', confidence: 0.4 },
+    { id: 'b', parentId: 'a', text: '旧方案 B', type: 'claim', status: 'rejected' },
+    { id: 'c', parentId: 'b', text: '旧方案 B 的细节', type: 'claim' },
+  ]);
+  assert.deepEqual(internals.lintTree(withStatus), lintTree(withStatus));
 });

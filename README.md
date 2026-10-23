@@ -13,7 +13,8 @@ It ships as three things that share one engine:
 |---|---|---|
 | [`@thinking-treelog/dsh-plugin`](packages/dsh-plugin) | A sidebar panel inside [dsh](https://github.com/deepseek-ai) | People working in the DeepSeek Harness |
 | [`@thinking-treelog/mcp`](packages/mcp) | A zero-dependency MCP server (stdio) | Claude Code, Cursor, Codex, any MCP client |
-| [`@thinking-treelog/core`](packages/core) | Pure extraction / layout / export logic | Anyone building their own adapter |
+| [`@thinking-treelog/cli`](packages/cli) | `treelog lint / export / diff / tree` | Design docs, ADRs, and CI pipelines |
+| [`@thinking-treelog/core`](packages/core) | Pure extraction / layout / lint / export logic | Anyone building their own adapter |
 
 > **Status: v0.1.** Extraction, tree layout, branch experiments, search, and export
 > work today. Automatic conversation capture (instead of pasting) is the next milestone —
@@ -50,7 +51,11 @@ it, branch it, and diff it.
 - **Search + type filter.** Find "every assumption" or "where did we mention pricing".
 - **Edit in place.** Every node's label, text, type, and confidence is editable; add
   children, delete nodes (children re-attach to the parent).
-- **Export.** Markdown outline, Mermaid flowchart, JSON, or copy to clipboard.
+- **Reasoning lint.** The panel runs the same rules as the CLI and links each finding
+  straight to the offending node.
+- **Decision status.** Mark nodes proposed / accepted / rejected / superseded; rejected
+  branches render dashed and stay visible for the record.
+- **Export.** Markdown outline, Mermaid flowchart, ADR, JSON, or copy to clipboard.
 - **Local-first.** Trees and API keys live in `localStorage`. Nothing is uploaded except
   the text you explicitly send to the endpoint you configured.
 
@@ -61,6 +66,48 @@ build_thought_tree    conversation text → tree JSON
 thought_tree_markdown tree JSON → Markdown outline
 thought_tree_mermaid  tree JSON → Mermaid flowchart
 thought_tree_stats    tree JSON → depth, type mix, branches, weak claims
+lint_thought_tree     tree JSON → reasoning-gap findings + severity summary
+thought_tree_adr      tree JSON → Architecture Decision Record
+```
+
+### In a CI pipeline
+
+This is the part that makes it useful beyond a single conversation: point it at the
+design docs your team already writes.
+
+```bash
+treelog lint docs/adr/*.md                 # human-readable, exits 1 on errors
+treelog lint docs/**/*.md --format sarif -o treelog.sarif
+treelog tree docs/adr-0007.md              # ASCII tree in the terminal
+treelog export docs/adr-0007.md --format adr
+treelog diff design.v1.md design.v2.md     # what changed between revisions
+```
+
+`lint` catches the reasoning gaps that review usually misses:
+
+| Rule | Severity | Catches |
+|---|---|---|
+| `conclusion-without-evidence` | error | a decision nobody justified |
+| `assumption-unverified` | warning | an assumption with no validation step |
+| `rejected-with-descendants` | warning | a rejected option still carrying live children |
+| `superseded-without-reference` | warning | a replaced decision that doesn't say what replaced it |
+| `low-confidence-conclusion` | warning | a conclusion with weak support |
+| `depth-exceeds` | warning | a decision chain too deep to follow |
+| `orphan-node` | error | structure that doesn't connect to any root |
+
+SARIF output means GitHub Code Scanning renders these as inline annotations, so a
+reviewer sees "this decision has no evidence" on the PR that introduced it.
+
+```yaml
+# .github/workflows/design-lint.yml
+- uses: actions/checkout@v4
+- uses: thinking-treelog/thinking-treelog@v1
+  with:
+    files: docs/**/*.md
+    format: sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: treelog.sarif
 ```
 
 ---
@@ -116,7 +163,17 @@ Reload the page. A **思维树** icon appears in the sidebar; clicking it opens 
 
 After publishing, this becomes `npx -y @thinking-treelog/mcp`.
 
-### 3. As a library
+### 3. As a CLI
+
+```bash
+# from this repo
+node packages/cli/bin/treelog.mjs lint examples/adr-0007-plugin-vs-site.md
+
+# after publishing
+npx -y @thinking-treelog/cli lint docs/adr/*.md
+```
+
+### 4. As a library
 
 ```bash
 npm install @thinking-treelog/core
@@ -124,10 +181,16 @@ npm install @thinking-treelog/core
 
 ```js
 import { extractWithRules, normalizeNodes, computeLayout, toMarkdown } from '@thinking-treelog/core';
+import { parseMarkdown, lintTree, toSarif, toAdr } from '@thinking-treelog/core/engineering';
 
 const nodes = normalizeNodes(extractWithRules(transcript));
 const layout = computeLayout(nodes);       // { nodes, links, width, height }
 console.log(toMarkdown({ title: 'Decision', nodes }));
+
+// Engineering flavour: parse a doc, lint it, emit SARIF for code scanning.
+const docNodes = parseMarkdown(await readFile('docs/adr-0007.md', 'utf8'));
+const findings = lintTree(docNodes);
+console.log(JSON.stringify(toSarif(findings, { file: 'docs/adr-0007.md' }), null, 2));
 ```
 
 ---
@@ -159,12 +222,19 @@ byte-identical output, so the two implementations cannot silently drift.
 ```
 packages/
   core/          pure engine: extract, normalize, graph, layout, export
+  core/src/engineering.js
+                 markdown parsing, lint rules, SARIF, ADR, tree diff
   mcp/           stdio MCP server + tool implementations
+  cli/           treelog binary (lint / tree / export / diff)
   dsh-plugin/    self-contained dsh Client module (no build step)
+examples/
+  adr-0007-plugin-vs-site.md   a deliberately imperfect ADR to try lint on
 scripts/
   smoke-client.mjs      headless check of the Client factory + slot registrations
-  consistency.test.mjs  client ⇄ core parity
+  consistency.test.mjs  client ⇄ core parity (extraction, layout, lint, exports)
+  engineering.test.mjs  markdown parsing, lint, SARIF, ADR, diff, CLI commands
   mcp.test.mjs          tool behaviour
+action.yml       GitHub Action wrapper around `treelog lint`
 ```
 
 The dsh Client half is deliberately self-contained: dsh loads it as a browser module
@@ -191,10 +261,14 @@ All tests run in-process with `node:test`; no browser and no network required.
 - [x] Branch experiments, node editing, deletion
 - [x] Markdown / Mermaid / JSON export
 - [x] Zero-dependency MCP server
+- [x] **Markdown/ADR parsing → tree**
+- [x] **Reasoning lint with SARIF output + GitHub Action**
+- [x] **Decision status (proposed / accepted / rejected / superseded)**
+- [x] **Tree diff between document revisions**
 - [ ] **Capture the current dsh conversation directly** (no pasting)
 - [ ] Import ChatGPT / Claude export JSON
-- [ ] Diff two branches side by side
-- [ ] Persist trees host-side so they survive across machines
+- [ ] Branch diff view (two branches side by side)
+- [ ] Baseline mode: only report findings introduced by a PR
 - [ ] Optional LLM-assisted "find the weakest link" review
 
 The first unchecked item is the one that decides whether this becomes a daily tool or

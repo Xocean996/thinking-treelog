@@ -80,6 +80,9 @@ const STOP_WORDS = new Set([
   'it', 'this', 'that', 'we', 'you', 'they', 'in', 'on', 'for', 'with',
 ]);
 
+/** Decision lifecycle states carried through normalisation for lint/ADR use. */
+const NODE_STATUS_SET = new Set(['proposed', 'accepted', 'rejected', 'superseded']);
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /**
@@ -243,6 +246,26 @@ export function normalizeNodes(raw) {
     const text = String(record.text || record.label || '').trim();
     if (!text) return;
 
+    // Engineering metadata is optional but must survive a round-trip, because
+    // lint rules and ADR export depend on it.
+    const extra = {};
+    if (typeof record.status === 'string' && NODE_STATUS_SET.has(record.status)) {
+      extra.status = record.status;
+    }
+    if (typeof record.owner === 'string' && record.owner.trim()) {
+      extra.owner = record.owner.trim();
+    }
+    if (record.isSection === true) {
+      extra.isSection = true;
+    }
+    if (Array.isArray(record.refs)) {
+      const refs = record.refs
+        .filter((r) => typeof r === 'string' && r.trim())
+        .map((r) => r.trim())
+        .slice(0, 10);
+      if (refs.length) extra.refs = refs;
+    }
+
     staged.push({
       id,
       parentId:
@@ -259,6 +282,7 @@ export function normalizeNodes(raw) {
       tags: Array.isArray(record.tags)
         ? record.tags.filter((t) => typeof t === 'string' && t.trim()).slice(0, 3)
         : extractTags(text),
+      ...extra,
     });
   });
 

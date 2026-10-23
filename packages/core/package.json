@@ -4,9 +4,10 @@
   "description": "Extraction, normalisation, layout and rendering helpers for Thinking TreeLog thought trees.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["thought-tree", "reasoning", "ai", "mcp", "visualization"],
+  "keywords": ["thought-tree", "reasoning", "ai", "mcp", "visualization", "lint", "sarif", "adr"],
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./engineering": "./src/engineering.js"
   },
   "files": ["src"],
   "scripts": {
