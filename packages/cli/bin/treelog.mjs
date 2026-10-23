@@ -16,9 +16,11 @@ import {
   diffPaths,
   exportTree,
   lintPaths,
+  lintPlanFile,
   loadBaseline,
   loadConfig,
   loadTree,
+  planTreeText,
   renderAsciiTree,
 } from '../lib/commands.mjs';
 
@@ -29,6 +31,8 @@ const USAGE = `treelog ${pkg.version} — thought-tree lint for design docs
 
 Usage:
   treelog lint <files...> [options]     Check documents for reasoning gaps (CI-ready)
+  treelog plan <file> [options]         Audit a structured implementation plan
+                                        (superpowers writing-plans format)
   treelog tree <file>                   Print the thought tree as ASCII
   treelog export <file> [options]       Export md | mermaid | adr | json | stats
   treelog diff <before> <after>         Compare two revisions of a decision
@@ -37,6 +41,7 @@ Options:
   --format <fmt>      lint: text | json | sarif | github | junit   (default text)
                       export: md | mermaid | adr | json | stats    (default md)
                       diff: text | json                             (default text)
+  --tree              plan: print the plan as an ASCII tree instead of linting
   --lang <en|zh>      Message language (default: config, else en)
   --config <file>     Config file (default: nearest treelog.config.json)
   --preset <name>     recommended | strict | relaxed
@@ -175,6 +180,38 @@ async function main() {
     }
 
     const failOn = typeof flags.failOn === 'string' ? flags.failOn : config.failOn ?? 'error';
+    if (failOn === 'never') return EXIT_CODES.ok;
+    if (failOn === 'warning') {
+      return result.summary.error + result.summary.warning > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;
+    }
+    return result.summary.error > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;
+  }
+
+  if (command === 'plan') {
+    if (!files.length) {
+      process.stderr.write('treelog plan needs a plan file\n');
+      return EXIT_CODES.usage;
+    }
+    const mode = flags.tree === true ? 'tree' : 'lint';
+
+    if (mode === 'tree') {
+      const { text } = await planTreeText(files[0]);
+      if (flags.out) await writeFile(flags.out, text, 'utf8');
+      else process.stdout.write(`${text}\n`);
+      return EXIT_CODES.ok;
+    }
+
+    const result = await lintPlanFile(files[0], {
+      format: typeof flags.format === 'string' ? flags.format : 'text',
+      locale: typeof flags.lang === 'string' ? flags.lang : 'en',
+      color: process.stdout.isTTY === true,
+      version: pkg.version,
+    });
+
+    if (flags.out) await writeFile(flags.out, result.text, 'utf8');
+    else process.stdout.write(`${result.text}\n`);
+
+    const failOn = typeof flags.failOn === 'string' ? flags.failOn : 'error';
     if (failOn === 'never') return EXIT_CODES.ok;
     if (failOn === 'warning') {
       return result.summary.error + result.summary.warning > 0 ? EXIT_CODES.findings : EXIT_CODES.ok;

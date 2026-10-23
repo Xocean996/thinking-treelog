@@ -121,6 +121,42 @@ treelog diff design.v1.md design.v2.md     # what changed between revisions
 Findings carry **source line numbers**, so SARIF and GitHub annotations land on the
 exact paragraph, not the top of the file.
 
+### Works with superpowers (and any structured plan)
+
+[superpowers](https://github.com/obra/superpowers) writes implementation plans with tasks,
+ordered steps, and `Consumes` / `Produces` interface declarations. Nothing checks that
+interface graph — `writing-plans` asks a human (or a model) to self-review it, and that is
+exactly where signature drift slips through.
+
+```bash
+treelog plan docs/superpowers/plans/2026-10-23-feature.md
+treelog plan docs/superpowers/plans/2026-10-23-feature.md --tree
+```
+
+```
+Plan auditing Implementation Plan
+  ⚠ task-without-verification:52 「Task 2」 — Task 2 "Interface linter" has no runnable verification step
+      ↳ Add a step with a command and expected output
+  ✖ signature-mismatch:69 「Task 3」 — "lintPlan" is declared as "lintPlan(plan: Plan): Finding[]"
+      but consumed as "lintPlan(plan): Finding[]"
+  ✖ undefined-consume:69 「Task 3」 — Task 3 consumes "formatFindings" but no task produces it
+  ⚠ review-focus-empty — Multi-task plan has an empty Review Focus section
+4 problem(s) — 2 error, 2 warning, 0 info
+```
+
+| Rule | Catches | The self-review item it automates |
+|---|---|---|
+| `undefined-consume` | a task uses a symbol no task produces | spec coverage / type consistency |
+| `signature-mismatch` | same symbol declared two ways | *"a function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7"* |
+| `task-without-verification` | a task has no runnable check | step granularity + TDD |
+| `task-without-files` | a task names no files | file structure |
+| `review-focus-empty` | no uncovered-input analysis | review focus |
+| `unused-produce` | a symbol nobody consumes (opt-in) | proportion / YAGNI |
+
+It reads the file format only. superpowers needs no patch, no fork, and no PR — the two
+projects couple through the plan markdown, which is the one thing guaranteed to stay
+stable.
+
 ### Configuration
 
 Drop a `treelog.config.json` anywhere above the docs (it walks up to find one):

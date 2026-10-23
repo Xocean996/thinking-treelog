@@ -9,13 +9,14 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run test:core && npm run test:engineering && npm run test:consistency && npm run test:client && npm run test:mcp",
+    "test": "npm run test:core && npm run test:engineering && npm run test:plan && npm run test:consistency && npm run test:client && npm run test:mcp",
     "test:core": "node packages/core/test/core.test.js",
     "test:engineering": "node scripts/engineering.test.mjs",
+    "test:plan": "node scripts/plan.test.mjs",
     "test:consistency": "node scripts/consistency.test.mjs",
     "test:client": "node scripts/smoke-client.mjs",
     "test:mcp": "node scripts/mcp.test.mjs",
-    "verify": "npm run test:core && npm run test:engineering && npm run test:consistency && npm run test:client && npm run test:mcp",
+    "verify": "npm run test:core && npm run test:engineering && npm run test:plan && npm run test:consistency && npm run test:client && npm run test:mcp",
     "treelog": "node packages/cli/bin/treelog.mjs",
     "lint:docs": "node packages/cli/bin/treelog.mjs lint examples/*.md"
   },

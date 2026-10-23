@@ -24,6 +24,12 @@ jobs:
       - name: Core engine tests
         run: npm run test:core
 
+      - name: Engineering tests (markdown, lint, SARIF, config, baseline)
+        run: npm run test:engineering
+
+      - name: Plan interface lint
+        run: npm run test:plan
+
       - name: Client half smoke test
         run: npm run test:client
 

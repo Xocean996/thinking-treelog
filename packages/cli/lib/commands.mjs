@@ -27,6 +27,7 @@ import {
   toAdr,
   toSarif,
 } from '@thinking-treelog/core/engineering';
+import { lintPlan, parsePlan, planToTree } from '@thinking-treelog/core/plan';
 
 export const EXIT_CODES = { ok: 0, findings: 1, usage: 2 };
 
@@ -424,6 +425,47 @@ export async function lintPaths(paths, options = {}) {
     suppressed,
     exitCode: summary.error > 0 ? EXIT_CODES.findings : EXIT_CODES.ok,
   };
+}
+
+/**
+ * Lint a structured implementation plan (superpowers `writing-plans` format).
+ *
+ * @param {string} path
+ * @param {{ readFile?: Function, format?: string, locale?: string, rules?: object, color?: boolean, version?: string }} [options]
+ */
+export async function lintPlanFile(path, options = {}) {
+  const read = options.readFile ?? defaultReadFile;
+  const raw = await read(path);
+  const plan = parsePlan(raw);
+  const findings = lintPlan(plan, { locale: options.locale, rules: options.rules });
+
+  const file = path.replace(/\\/g, '/');
+  for (const finding of findings) finding.file = file;
+
+  const summary = summarizeFindings(findings);
+  return {
+    plan,
+    findings,
+    summary,
+    text: formatFindings(findings, options.format ?? 'text', {
+      file: plan.title || file,
+      color: options.color,
+      suite: 'treelog-plan',
+      version: options.version,
+    }),
+    exitCode: summary.error > 0 ? EXIT_CODES.findings : EXIT_CODES.ok,
+  };
+}
+
+/**
+ * Render a plan as an ASCII tree.
+ * @param {string} path
+ * @param {{ readFile?: Function }} [options]
+ */
+export async function planTreeText(path, options = {}) {
+  const read = options.readFile ?? defaultReadFile;
+  const plan = parsePlan(await read(path));
+  return { plan, text: renderAsciiTree(planToTree(plan)) };
 }
 
 /**
