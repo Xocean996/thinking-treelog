@@ -73,6 +73,10 @@ it, branch it, and diff it.
   OpenAI-compatible endpoint for semantic extraction, with automatic fallback.
 - **Time travel.** A slider reveals nodes in reasoning order, so you can replay how the
   conclusion was built instead of jumping to the end.
+- **Fly-to navigation.** Click any node and the canvas glides to centre it. The toolbar
+  carries root / previous issue / next issue / centre / fit controls, and the arrow keys
+  walk the tree (↑ parent, ↓ child/next sibling, Home root, Enter re-centre) — so a
+  40-node argument is navigable without touching the mouse.
 - **Branch experiments.** Fork any node into a parallel branch and compare alternatives.
 - **Search + type filter.** Find "every assumption" or "where did we mention pricing".
 - **Edit in place.** Every node's label, text, type, and confidence is editable; add

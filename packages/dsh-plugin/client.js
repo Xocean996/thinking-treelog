@@ -994,7 +994,8 @@ window.__ModuleLoader__.load({
     const CSS = `
       .ttl-root {
         display: flex; flex-direction: column; height: 100%; min-height: 0;
-        width: 100%; max-width: 100%; box-sizing: border-box;
+        width: 100%; max-width: calc(100vw - 300px); min-width: 0;
+        box-sizing: border-box;
         overflow: hidden;
         background: var(--dsw-alias-bg-base, #fff);
         color: var(--dsw-alias-label-primary, #1a1a1a);
@@ -1018,11 +1019,17 @@ window.__ModuleLoader__.load({
       .ttl-spacer { flex: 1; }
       .ttl-btn {
         display: inline-flex; align-items: center; gap: 5px;
-        border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 7px;
+        border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 8px;
         background: var(--dsw-alias-bg-layer-1, #fff); color: inherit;
-        padding: 5px 10px; font-size: 12px; cursor: pointer; line-height: 1.4;
+        padding: 6px 11px; font-size: 12px; cursor: pointer; line-height: 1.4;
+        transition: border-color .15s ease, background .15s ease, transform .08s ease, box-shadow .15s ease;
       }
-      .ttl-btn:hover { border-color: var(--dsw-alias-border-l2, #b9bdc6); }
+      .ttl-btn:hover {
+        border-color: var(--dsw-alias-border-l2, #b9bdc6);
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      }
+      .ttl-btn:active { transform: translateY(1px); }
+      .ttl-btn:focus-visible { outline: 2px solid #2f6feb; outline-offset: 2px; }
       .ttl-btn:disabled { opacity: .45; cursor: not-allowed; }
       .ttl-btn.primary {
         background: #2f6feb; border-color: transparent; color: #fff;
@@ -1043,20 +1050,42 @@ window.__ModuleLoader__.load({
         border-right: 1px solid var(--dsw-alias-border-l1, #e5e7eb);
         background: var(--dsw-alias-bg-layer-1, #fafafa);
       }
-      .ttl-side-inner { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
-      .ttl-side h4 { margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dsw-alias-label-secondary, #777); }
+      .ttl-side-inner { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+      .ttl-side h4 {
+        margin: 0; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+        color: var(--dsw-alias-label-secondary, #777); font-weight: 600;
+        display: flex; align-items: center; gap: 6px;
+      }
+      .ttl-side h4::before {
+        content: ''; width: 3px; height: 11px; border-radius: 2px;
+        background: #2f6feb; display: inline-block; flex: none;
+      }
       .ttl-tree-list { display: flex; flex-direction: column; gap: 4px; }
       .ttl-tree-item {
-        display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px;
+        display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 9px;
         cursor: pointer; border: 1px solid transparent;
+        transition: background .14s ease, border-color .14s ease;
       }
       .ttl-tree-item:hover { background: var(--dsw-alias-bg-layer-2, #f0f1f3); }
-      .ttl-tree-item.active { border-color: var(--dsw-alias-brand-primary, #2f6feb); background: var(--dsw-alias-bg-base, #fff); }
+      .ttl-tree-item.active {
+        border-color: #2f6feb; background: var(--dsw-alias-bg-base, #fff);
+        box-shadow: inset 3px 0 0 #2f6feb;
+      }
       .ttl-tree-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .ttl-tree-item .meta { font-size: 10px; color: var(--dsw-alias-label-secondary, #888); }
-      .ttl-canvas { flex: 1; position: relative; min-width: 0; overflow: hidden; background: var(--dsw-alias-bg-base, #fff); }
-      .ttl-canvas svg { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
-      .ttl-canvas svg.dragging { cursor: grabbing; }
+      .ttl-canvas {
+        flex: 1; position: relative; min-width: 0; overflow: hidden;
+        background-color: var(--dsw-alias-bg-base, #fff);
+        background-image: radial-gradient(
+          circle,
+          color-mix(in srgb, var(--dsw-alias-label-secondary, #999) 26%, transparent) 1px,
+          transparent 1px
+        );
+        background-size: 22px 22px;
+        background-position: -1px -1px;
+      }
+      .ttl-canvas > svg { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+      .ttl-canvas > svg.dragging { cursor: grabbing; }
       .ttl-empty {
         position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px;
         align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary, #888);
@@ -1104,6 +1133,43 @@ window.__ModuleLoader__.load({
       .ttl-settings { display: flex; flex-direction: column; gap: 8px; }
       .ttl-settings label { font-size: 11px; color: var(--dsw-alias-label-secondary, #777); }
       .ttl-settings input, .ttl-settings select { width: 100%; box-sizing: border-box; }
+      .ttl-side-inner::-webkit-scrollbar, .ttl-detail::-webkit-scrollbar { width: 8px; }
+      .ttl-side-inner::-webkit-scrollbar-thumb,
+      .ttl-detail::-webkit-scrollbar-thumb {
+        background: var(--dsw-alias-border-l2, #c9ccd3); border-radius: 4px;
+      }
+      .ttl-side-inner::-webkit-scrollbar-track,
+      .ttl-detail::-webkit-scrollbar-track { background: transparent; }
+      .ttl-nav-inline {
+        display: inline-flex; align-items: center; gap: 1px; padding: 2px;
+        border-radius: 9px; border: 1px solid var(--dsw-alias-border-l1, #e0e3e8);
+        background: var(--dsw-alias-bg-base, #fff);
+      }
+      .ttl-nav-inline button {
+        width: 26px; height: 23px; display: inline-flex; align-items: center; justify-content: center;
+        border: none; border-radius: 7px; background: transparent; color: inherit;
+        cursor: pointer; font-size: 12px; line-height: 1;
+        transition: background .14s ease;
+      }
+      .ttl-nav-inline button:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, #eef0f3); }
+      .ttl-nav-inline button:disabled { opacity: .35; cursor: default; }
+      .ttl-nav-inline button.warn { color: #e8590c; }
+      .ttl-nav {
+        position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px;
+        padding: 6px; border-radius: 12px; z-index: 3;
+        background: var(--dsw-alias-bg-overlay, #fff);
+        border: 1px solid var(--dsw-alias-border-l1, #e0e3e8);
+        box-shadow: 0 6px 20px rgba(0,0,0,.14);
+      }
+      .ttl-nav button {
+        width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+        border: none; border-radius: 8px; background: transparent; color: inherit;
+        cursor: pointer; font-size: 13px; line-height: 1;
+        transition: background .14s ease, color .14s ease;
+      }
+      .ttl-nav button:hover { background: var(--dsw-alias-bg-layer-2, #eef0f3); }
+      .ttl-nav button.warn { color: #e8590c; }
+      .ttl-empty svg { width: 56px; height: 56px; opacity: .5; }
       @media (max-width: 980px) {
         .ttl-side { width: 250px; }
         .ttl-detail { position: absolute; right: 0; top: 0; bottom: 0; z-index: 4; width: 300px; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
@@ -1140,11 +1206,15 @@ window.__ModuleLoader__.load({
     function TreeCanvas(props) {
       const {
         nodes, selectedId, onSelect, query, typeFilter, cutoff,
-        onAddChild, layoutRef,
+        onAddChild, layoutRef, findings, apiRef,
       } = props;
 
       const svgRef = useRef(null);
       const [view, setView] = useState({ x: 0, y: 0, w: 800, h: 600 });
+      const viewRef = useRef(view);
+      viewRef.current = view;
+      const rafRef = useRef(0);
+      const issueCursor = useRef(-1);
       const [drag, setDrag] = useState(null);
       const fittedRef = useRef('');
 
@@ -1154,8 +1224,9 @@ window.__ModuleLoader__.load({
         if (layoutRef) layoutRef.current = layout;
       }, [layout, layoutRef]);
 
-      // Fit whenever the topology changes shape.
-      const signature = `${layout.width}x${layout.height}x${nodes.length}`;
+      // Fit whenever the topology changes shape. The first node's timestamp makes
+      // two trees with identical geometry still re-fit when you switch between them.
+      const signature = `${layout.width}x${layout.height}x${nodes.length}x${nodes[0] ? nodes[0].createdAt : 0}`;
       useEffect(() => {
         if (fittedRef.current === signature) return;
         fittedRef.current = signature;
@@ -1216,6 +1287,112 @@ window.__ModuleLoader__.load({
         });
       };
 
+      /* ---- Fly-to navigation -------------------------------------- */
+
+      const animateTo = useCallback((target) => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        const from = { ...viewRef.current };
+        const start = performance.now();
+        const frame = (now) => {
+          const t = Math.min(1, (now - start) / 340);
+          const ease = 1 - Math.pow(1 - t, 3);
+          setView({
+            x: from.x + (target.x - from.x) * ease,
+            y: from.y + (target.y - from.y) * ease,
+            w: from.w + (target.w - from.w) * ease,
+            h: from.h + (target.h - from.h) * ease,
+          });
+          if (t < 1) rafRef.current = requestAnimationFrame(frame);
+        };
+        rafRef.current = requestAnimationFrame(frame);
+      }, []);
+
+      const focusNode = useCallback((id, force) => {
+        const entry = layout.nodes.find((n) => n.node.id === id);
+        if (!entry) return;
+        const v = viewRef.current;
+        const cx = entry.x + NODE_W / 2;
+        const cy = entry.y + NODE_H / 2;
+        const dx = Math.abs(cx - (v.x + v.w / 2));
+        const dy = Math.abs(cy - (v.y + v.h / 2));
+        // Only fly when the target is actually off-centre.
+        if (!force && dx < v.w * 0.16 && dy < v.h * 0.16) return;
+        animateTo({ x: cx - v.w / 2, y: cy - v.h / 2, w: v.w, h: v.h });
+      }, [layout, animateTo]);
+
+      const selectAndFocus = useCallback((id) => {
+        onSelect(id);
+        focusNode(id);
+      }, [onSelect, focusNode]);
+
+      const jumpIssue = useCallback((dir) => {
+        const list = (findings || []).filter((f) => f.nodeId).map((f) => f.nodeId);
+        if (!list.length) return;
+        issueCursor.current = (issueCursor.current + dir + list.length) % list.length;
+        const id = list[issueCursor.current];
+        onSelect(id);
+        focusNode(id, true);
+      }, [findings, onSelect, focusNode]);
+
+      const fitAll = useCallback(() => {
+        const el = svgRef.current;
+        const box = el ? el.getBoundingClientRect() : { width: 800, height: 600 };
+        const availW = Math.max(200, box.width || 800);
+        const availH = Math.max(200, box.height || 600);
+        const scale = Math.min(availW / Math.max(1, layout.width), availH / Math.max(1, layout.height), 1.1);
+        const w = availW / scale;
+        const h = availH / scale;
+        animateTo({ x: layout.width / 2 - w / 2, y: layout.height / 2 - h / 2, w, h });
+      }, [layout, animateTo]);
+
+      // Expose the navigation controls so the toolbar can drive them too.
+      useEffect(() => {
+        if (!apiRef) return;
+        apiRef.current = { focusNode, jumpIssue, fitAll, selectAndFocus };
+      }, [apiRef, focusNode, jumpIssue, fitAll, selectAndFocus]);
+
+      // Keyboard roaming: ←/↑ up, →/↓ down, Home to root, Enter to centre.
+      useEffect(() => {
+        const onKey = (event) => {
+          if (!selectedId) return;
+          const tag = (event.target && event.target.tagName) || '';
+          if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+
+          const graph = layout.graph;
+          const node = graph.nodeMap.get(selectedId);
+          if (!node) return;
+
+          const kids = graph.childrenOf.get(selectedId) || [];
+          const siblings = node.parentId
+            ? (graph.childrenOf.get(node.parentId) || [])
+            : graph.roots;
+          const idx = siblings.indexOf(selectedId);
+
+          let next = null;
+          if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+            next = kids[0] || siblings[idx + 1] || null;
+          } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+            next = node.parentId;
+          } else if (event.key === 'Home') {
+            next = graph.roots[0] || null;
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            focusNode(selectedId, true);
+            return;
+          } else {
+            return;
+          }
+
+          if (next) {
+            event.preventDefault();
+            onSelect(next);
+            focusNode(next);
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [selectedId, layout, focusNode, onSelect]);
+
       const onPointerDown = (event) => {
         if (event.button !== 0) return;
         const el = svgRef.current;
@@ -1239,11 +1416,6 @@ window.__ModuleLoader__.load({
 
       const onPointerUp = () => setDrag(null);
 
-      const resetView = () => {
-        fittedRef.current = '';
-        setView({ x: 0, y: 0, w: Math.max(400, layout.width), h: Math.max(300, layout.height) });
-      };
-
       return h(
         'div',
         { className: 'ttl-canvas' },
@@ -1259,6 +1431,16 @@ window.__ModuleLoader__.load({
             onPointerUp,
             onPointerCancel: onPointerUp,
           },
+          h(
+            'defs',
+            null,
+            h('filter', { id: 'ttl-shadow', x: '-30%', y: '-30%', width: '160%', height: '170%' },
+              h('feDropShadow', { dx: '0', dy: '2', stdDeviation: '3', floodColor: '#000', floodOpacity: '0.24' }),
+            ),
+            h('filter', { id: 'ttl-glow', x: '-45%', y: '-45%', width: '190%', height: '190%' },
+              h('feDropShadow', { dx: '0', dy: '0', stdDeviation: '5', floodColor: '#2f6feb', floodOpacity: '0.9' }),
+            ),
+          ),
           // Links first so nodes paint on top.
           h(
             'g',
@@ -1306,7 +1488,7 @@ window.__ModuleLoader__.load({
                   onClick: (event) => {
                     if (drag && drag.moved) return;
                     event.stopPropagation();
-                    onSelect(node.id);
+                    selectAndFocus(node.id);
                   },
                   onDoubleClick: (event) => {
                     event.stopPropagation();
@@ -1316,8 +1498,9 @@ window.__ModuleLoader__.load({
                 h('rect', {
                   width: NODE_W,
                   height: NODE_H,
-                  rx: 9,
+                  rx: 10,
                   fill,
+                  filter: selected ? 'url(#ttl-glow)' : 'url(#ttl-shadow)',
                   stroke: selected
                     ? '#111'
                     : rejected
@@ -1357,33 +1540,54 @@ window.__ModuleLoader__.load({
               );
             }),
           ),
-          h(
-            'g',
-            { transform: `translate(${view.x + view.w - 104}, ${view.y + view.h - 40})` },
-            h(
-              'g',
-              { onClick: resetView, style: { cursor: 'pointer' } },
-              h('rect', {
-                width: 88, height: 28, rx: 6,
-                fill: 'var(--dsw-alias-bg-layer-1, #fff)',
-                stroke: 'var(--dsw-alias-border-l1, #d9dbe0)',
-              }),
-              h(
-                'text',
-                {
-                  x: 44, y: 18, textAnchor: 'middle', fontSize: 11,
-                  fill: 'var(--dsw-alias-label-secondary, #666)',
-                  style: { pointerEvents: 'none' },
-                },
-                '适应画布',
-              ),
-            ),
-          ),
         ),
+        layout.nodes.length
+          ? h(
+              'div',
+              { className: 'ttl-nav' },
+              h('button', {
+                title: '回到根节点 (Home)',
+                onClick: () => {
+                  const rootId = layout.graph.roots[0];
+                  if (rootId) { onSelect(rootId); focusNode(rootId, true); }
+                },
+              }, '⌂'),
+              h('button', {
+                title: '上一个问题',
+                className: 'warn',
+                disabled: !(findings || []).some((f) => f.nodeId),
+                onClick: () => jumpIssue(-1),
+              }, '▲'),
+              h('button', {
+                title: '下一个问题',
+                className: 'warn',
+                disabled: !(findings || []).some((f) => f.nodeId),
+                onClick: () => jumpIssue(1),
+              }, '▼'),
+              h('button', {
+                title: '居中当前节点 (Enter)',
+                disabled: !selectedId,
+                onClick: () => selectedId && focusNode(selectedId, true),
+              }, '◎'),
+              h('button', { title: '适应画布', onClick: fitAll }, '⤢'),
+            )
+          : null,
         layout.nodes.length === 0
           ? h(
               'div',
               { className: 'ttl-empty' },
+              h(
+                'svg',
+                { width: 64, height: 64, viewBox: '0 0 24 24', fill: 'none',
+                  stroke: 'currentColor', strokeWidth: 1.2,
+                  strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+                h('path', { d: 'M6 3.5v17' }),
+                h('path', { d: 'M6 8h5' }),
+                h('path', { d: 'M6 16h5' }),
+                h('circle', { cx: 14.5, cy: 8, r: 2.2 }),
+                h('circle', { cx: 14.5, cy: 16, r: 2.2 }),
+                h('circle', { cx: 20.5, cy: 12, r: 1.6 }),
+              ),
               h('strong', null, '还没有思维树'),
               h('div', null, '在左侧粘贴一段对话，点击「解析成思维树」'),
             )
@@ -1576,6 +1780,7 @@ window.__ModuleLoader__.load({
       const [showSidebar, setShowSidebar] = useState(true);
 
       const layoutRef = useRef(null);
+      const canvasApi = useRef(null);
 
       const current = useMemo(
         () => trees.find((t) => t.id === currentId) || null,
@@ -1872,6 +2077,40 @@ window.__ModuleLoader__.load({
                         : '规则提取'
                   }`
                 : '尚未选择'),
+            h(
+              'div',
+              { className: 'ttl-nav-inline' },
+              h('button', {
+                title: '回到根节点 (Home)',
+                onClick: () => {
+                  const rootId = graph.roots[0];
+                  if (!rootId) return;
+                  setSelectedId(rootId);
+                  if (canvasApi.current) canvasApi.current.focusNode(rootId, true);
+                },
+              }, '⌂'),
+              h('button', {
+                title: '上一个问题',
+                className: 'warn',
+                disabled: !findings.some((f) => f.nodeId),
+                onClick: () => canvasApi.current && canvasApi.current.jumpIssue(-1),
+              }, '▲'),
+              h('button', {
+                title: '下一个问题',
+                className: 'warn',
+                disabled: !findings.some((f) => f.nodeId),
+                onClick: () => canvasApi.current && canvasApi.current.jumpIssue(1),
+              }, '▼'),
+              h('button', {
+                title: '居中当前节点 (Enter)',
+                disabled: !selectedId,
+                onClick: () => canvasApi.current && canvasApi.current.focusNode(selectedId, true),
+              }, '◎'),
+              h('button', {
+                title: '适应画布',
+                onClick: () => canvasApi.current && canvasApi.current.fitAll(),
+              }, '⤢'),
+            ),
             h('span', { className: 'ttl-spacer' }),
             h('button', { className: 'ttl-btn ghost', onClick: () => setShowSidebar((v) => !v) },
               showSidebar ? '收起输入' : '展开输入'),
@@ -2042,6 +2281,8 @@ window.__ModuleLoader__.load({
             cutoff,
             onAddChild: addChild,
             layoutRef,
+            findings,
+            apiRef: canvasApi,
           }),
 
           // Detail
