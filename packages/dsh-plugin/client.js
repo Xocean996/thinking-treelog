@@ -1185,6 +1185,7 @@ window.__ModuleLoader__.load({
         border: 1px solid var(--dsw-alias-border-l1, #d9dbe0); border-radius: 8px;
         background: var(--dsw-alias-bg-layer-1, #fff); color: inherit;
         padding: 6px 11px; font-size: 12px; cursor: pointer; line-height: 1.4;
+        white-space: nowrap;
         transition: border-color .15s ease, background .15s ease, transform .08s ease, box-shadow .15s ease;
       }
       .ttl-btn:hover {
