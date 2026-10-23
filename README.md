@@ -64,6 +64,11 @@ it, branch it, and diff it.
 ### Inside dsh
 
 - **Paste → tree.** Drop in a conversation, a plan, or your own notes; get a typed tree.
+- **Zero-friction input.** `Ctrl+Enter` parses, a clipboard button pulls the last thing
+  you copied, and dragging a `.md` file onto the panel loads it.
+- **Plan awareness.** A superpowers plan is recognised by its `### Task` structure: tasks
+  and steps become the tree, and the panel applies the plan rules instead of the prose
+  rules — so interface drift shows up without leaving dsh.
 - **Two extractors.** Local rule extraction (offline, instant, free) or any
   OpenAI-compatible endpoint for semantic extraction, with automatic fallback.
 - **Time travel.** A slider reveals nodes in reasoning order, so you can replay how the

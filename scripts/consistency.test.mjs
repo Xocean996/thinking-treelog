@@ -13,6 +13,7 @@ import {
   toMermaid,
 } from '../packages/core/src/index.js';
 import { lintTree } from '../packages/core/src/engineering.js';
+import { lintPlan, parsePlan } from '../packages/core/src/plan.js';
 
 /**
  * The dsh Client half is a self-contained browser module, so it carries its own
@@ -154,4 +155,19 @@ test('client and core agree on reasoning lint findings', () => {
     { id: 'c', parentId: 'b', text: '旧方案 B 的细节', type: 'claim' },
   ]);
   assert.deepEqual(internals.lintTree(withStatus), lintTree(withStatus, { locale: 'zh' }));
+});
+
+test('client and core agree on plan lint', () => {
+  const planMd = readFileSync(
+    resolve(here, '../examples/superpowers-plan.md'),
+    'utf8',
+  );
+
+  assert.equal(internals.looksLikePlan(planMd), true);
+  assert.equal(internals.looksLikePlan('just some prose 因此 所以'), false);
+
+  const clientFindings = internals.lintPlanClient(internals.parsePlanClient(planMd));
+  const coreFindings = lintPlan(parsePlan(planMd), { locale: 'zh' });
+
+  assert.deepEqual(clientFindings, coreFindings, 'plan lint diverged');
 });

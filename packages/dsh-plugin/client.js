@@ -695,6 +695,235 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Structured plan auditing (superpowers writing-plans output)
+     * ------------------------------------------------------------------ */
+
+    const PLAN_RULES = {
+      'undefined-consume': { severity: 'error', text: '消费了没有 Task 生产的符号' },
+      'signature-mismatch': { severity: 'error', text: '同一个符号有两种签名' },
+      'task-without-verification': { severity: 'warning', text: 'Task 没有可执行的验证步骤' },
+      'review-focus-empty': { severity: 'warning', text: '多任务计划缺少 Review Focus' },
+    };
+
+    function looksLikePlan(text) {
+      return /^###\s+Task\s+\d+\s*[:：]/m.test(String(text));
+    }
+
+    function parseIfaceClient(raw) {
+      const text = String(raw).trim();
+      const code = text.match(/`([^`]+)`/);
+      const body = (code ? code[1] : text).trim();
+      const name = body.match(/^([A-Za-z_$][\w$]*)/);
+      const from = text.match(/from\s+Task\s+(\d+)/i);
+      return {
+        symbol: name ? name[1] : String(body).split(/[\s(]/)[0],
+        signature: body,
+        fromTask: from ? Number(from[1]) : null,
+      };
+    }
+
+    function parsePlanClient(markdown) {
+      const lines = String(markdown).replace(/\r\n/g, '\n').split('\n');
+      const plan = { title: '', tasks: [], reviewCount: 0 };
+      let task = null;
+      let inFence = false;
+      let inReview = false;
+
+      const pushTask = () => { if (task) plan.tasks.push(task); };
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const lineNo = i + 1;
+
+        if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+        if (inFence) continue;
+
+        if (!plan.title) {
+          const h1 = line.match(/^#\s+(.+?)\s*$/);
+          if (h1) { plan.title = h1[1]; continue; }
+        }
+
+        const taskMatch = line.match(/^###\s+Task\s+(\d+)\s*[:：]\s*(.+?)\s*$/i);
+        if (taskMatch) {
+          pushTask();
+          task = {
+            id: Number(taskMatch[1]),
+            title: taskMatch[2],
+            line: lineNo,
+            fileCount: 0,
+            consumes: [],
+            produces: [],
+            steps: [],
+          };
+          inReview = false;
+          continue;
+        }
+
+        if (/^##\s+/.test(line)) {
+          inReview = /review\s*focus/i.test(line);
+          continue;
+        }
+
+        if (inReview) {
+          if (/^\s*[-*]\s+\S/.test(line)) plan.reviewCount += 1;
+          continue;
+        }
+
+        if (!task) continue;
+
+        if (/^\s*-\s*(Create|Modify|Test)\s*[:：]/i.test(line)) {
+          task.fileCount += 1;
+          continue;
+        }
+
+        const iface = line.match(/^\s*-\s*(Consumes|Produces)\s*[:：]\s*(.+)$/i);
+        if (iface) {
+          const parsed = parseIfaceClient(iface[2]);
+          if (/consumes/i.test(iface[1])) task.consumes.push(parsed);
+          else task.produces.push(parsed);
+          continue;
+        }
+
+        const step = line.match(/^\s*-\s*\[([ xX])\]\s*(?:\*\*)?Step\s+(\d+)\s*[:：]?\s*(?:\*\*)?\s*(.*)$/);
+        if (step) {
+          task.steps.push({
+            index: Number(step[2]),
+            text: step[3].replace(/\*+\s*$/, '').trim(),
+            line: lineNo,
+          });
+        }
+      }
+
+      pushTask();
+      return plan;
+    }
+
+    function isVerificationStep(text) {
+      return /(^|\b)(run|execute|运行)\b|expected\s*:|verify it (passes|fails)/i.test(text);
+    }
+
+    function lintPlanClient(plan) {
+      const findings = [];
+      if (!plan.tasks.length) return findings;
+
+      const producers = new Map();
+      plan.tasks.forEach((task) => {
+        task.produces.forEach((iface) => {
+          if (!producers.has(iface.symbol)) producers.set(iface.symbol, []);
+          producers.get(iface.symbol).push({ taskId: task.id, signature: iface.signature });
+        });
+      });
+
+      const norm = (s) => String(s).replace(/\s+/g, '').toLowerCase();
+
+      const add = (rule, task, message, hint) => {
+        findings.push({
+          rule,
+          severity: PLAN_RULES[rule].severity,
+          message,
+          hint,
+          taskId: task ? task.id : null,
+          nodeLabel: task ? `Task ${task.id}` : '',
+          ...(task && Number.isFinite(task.line) ? { line: task.line } : {}),
+        });
+      };
+
+      plan.tasks.forEach((task) => {
+        task.consumes.forEach((iface) => {
+          const makers = producers.get(iface.symbol);
+
+          if (!makers || !makers.length) {
+            if (iface.fromTask !== null) {
+              add(
+                'undefined-consume',
+                task,
+                `Task ${task.id} 消费了「${iface.symbol}」，但没有任何 Task 生产它`,
+                '要么在对应 Task 补上 Produces，要么改掉 Consumes 的名字',
+              );
+            }
+            return;
+          }
+
+          if (iface.fromTask !== null && !makers.some((m) => m.taskId === iface.fromTask)) {
+            add(
+              'undefined-consume',
+              task,
+              `Task ${task.id} 说「${iface.symbol}」来自 Task ${iface.fromTask}，但那里没有生产它`,
+              '要么在对应 Task 补上 Produces，要么改掉 Consumes 的名字',
+            );
+            return;
+          }
+
+          if (norm(makers[0].signature) !== norm(iface.signature)) {
+            add(
+              'signature-mismatch',
+              task,
+              `「${iface.symbol}」声明为「${makers[0].signature}」，却被当作「${iface.signature}」使用`,
+              '让两边使用同一个签名',
+            );
+          }
+        });
+
+        if (!task.steps.some((s) => isVerificationStep(s.text))) {
+          add(
+            'task-without-verification',
+            task,
+            `Task ${task.id}「${task.title}」没有可执行的验证步骤`,
+            '补一个带命令和预期输出的步骤',
+          );
+        }
+
+        if (task.fileCount === 0) {
+          add('task-without-files', task, `Task ${task.id}「${task.title}」没有列出文件`, '列出这个 Task 创建或修改的文件');
+        }
+      });
+
+      if (plan.tasks.length > 1 && plan.reviewCount === 0) {
+        add('review-focus-empty', null, '多任务计划缺少 Review Focus 段', '写出 spec 没有覆盖的输入或失败模式');
+      }
+
+      return findings;
+    }
+
+    function planToTreeClient(plan) {
+      const nodes = [];
+      const now = Date.now();
+      let seq = 0;
+
+      const push = (parentId, label, text, type, extra) => {
+        seq += 1;
+        const node = {
+          id: `p${seq}`,
+          parentId,
+          label,
+          text,
+          type,
+          confidence: 0.8,
+          branchId: DEFAULT_BRANCH,
+          createdAt: now + seq,
+          tags: [],
+          ...(extra || {}),
+        };
+        nodes.push(node);
+        return node;
+      };
+
+      const root = push(null, plan.title || 'Implementation plan', plan.title || 'Implementation plan', 'claim', { isSection: true });
+      plan.tasks.forEach((task) => {
+        const taskNode = push(root.id, `Task ${task.id}: ${task.title}`, task.title, 'action', {
+          isSection: true,
+          line: task.line,
+        });
+        task.steps.forEach((step) => {
+          push(taskNode.id, step.text || `Step ${step.index}`, step.text, isVerificationStep(step.text) ? 'evidence' : 'action', {
+            line: step.line,
+          });
+        });
+      });
+      return nodes;
+    }
+
+    /* ------------------------------------------------------------------ *
      * Persistence
      * ------------------------------------------------------------------ */
 
@@ -1322,7 +1551,14 @@ window.__ModuleLoader__.load({
       const nodes = current ? current.nodes : [];
       const graph = useMemo(() => buildGraph(nodes), [nodes]);
       const selected = selectedId ? graph.nodeMap.get(selectedId) : null;
-      const findings = useMemo(() => (nodes.length ? lintTree(nodes) : []), [nodes]);
+      const findings = useMemo(() => {
+        if (!nodes.length) return [];
+        // Plan trees carry their own rule set: interface drift, missing checks.
+        if (current && current.extractor === 'plan') {
+          return lintPlanClient(parsePlanClient(current.source || ''));
+        }
+        return lintTree(nodes);
+      }, [nodes, current]);
       const errorCount = findings.filter((f) => f.severity === 'error').length;
 
       useEffect(() => {
@@ -1353,6 +1589,38 @@ window.__ModuleLoader__.load({
         [currentId],
       );
 
+      const importFromClipboard = async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (!text.trim()) {
+            setNotice('剪贴板是空的');
+            return;
+          }
+          setSource(text);
+          setNotice('已从剪贴板导入，按 Ctrl+Enter 解析');
+        } catch (err) {
+          setNotice('浏览器拒绝读取剪贴板，请手动粘贴');
+        }
+      };
+
+      const onDropFile = async (event) => {
+        event.preventDefault();
+        const files = event.dataTransfer && event.dataTransfer.files;
+        const file = files && files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          setNotice('文件超过 2MB，请先裁剪');
+          return;
+        }
+        try {
+          const text = await file.text();
+          setSource(text);
+          setNotice(`已载入 ${file.name}，按 Ctrl+Enter 解析`);
+        } catch (err) {
+          setNotice('读取文件失败');
+        }
+      };
+
       const doExtract = async () => {
         const text = source.trim();
         if (!text) {
@@ -1373,7 +1641,19 @@ window.__ModuleLoader__.load({
           let extracted = null;
           let extractor = 'rule';
 
-          const wantsLlm = settings.mode !== 'rule' && String(settings.llm.apiKey || '').trim();
+          // A superpowers plan is a structured document, not prose: parse its
+          // tasks and interfaces instead of extracting sentences.
+          if (looksLikePlan(text)) {
+            const plan = parsePlanClient(text);
+            extracted = {
+              title: plan.title || 'Implementation plan',
+              nodes: planToTreeClient(plan),
+            };
+            extractor = 'plan';
+          }
+
+          const wantsLlm =
+            !extracted && settings.mode !== 'rule' && String(settings.llm.apiKey || '').trim();
           if (wantsLlm) {
             try {
               const result = await extractWithLlm(text, settings.llm, controller ? controller.signal : undefined);
@@ -1384,7 +1664,7 @@ window.__ModuleLoader__.load({
               if (settings.mode === 'llm') throw new Error(message);
               warnings.push(`AI 提取失败，已回退到本地规则：${message}`);
             }
-          } else if (settings.mode === 'llm') {
+          } else if (!extracted && settings.mode === 'llm') {
             throw new Error('请先在设置中填写 API Key');
           }
 
@@ -1534,7 +1814,11 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'ttl-root' },
+        {
+          className: 'ttl-root',
+          onDragOver: (event) => event.preventDefault(),
+          onDrop: onDropFile,
+        },
         h('style', { dangerouslySetInnerHTML: { __html: CSS } }),
 
         // Toolbar
@@ -1543,7 +1827,15 @@ window.__ModuleLoader__.load({
           { className: 'ttl-bar' },
           h('span', { className: 'ttl-title' }, '思维树'),
           h('span', { className: 'ttl-sub' },
-            current ? `${current.title} · ${totalNodes} 节点 · ${current.extractor === 'llm' ? 'AI 提取' : '规则提取'}` : '尚未选择'),
+            current
+              ? `${current.title} · ${totalNodes} 节点 · ${
+                  current.extractor === 'llm'
+                    ? 'AI 提取'
+                    : current.extractor === 'plan'
+                      ? '计划解析'
+                      : '规则提取'
+                }`
+              : '尚未选择'),
           h('span', { className: 'ttl-spacer' }),
           h('input', {
             className: 'ttl-input',
@@ -1596,8 +1888,14 @@ window.__ModuleLoader__.load({
                     className: 'ttl-textarea',
                     rows: 8,
                     value: source,
-                    placeholder: '粘贴一段对话、一次方案讨论，或你自己的思考记录…',
+                    placeholder: '粘贴对话、方案讨论，或直接拖入 .md 计划文件…',
                     onChange: (e) => setSource(e.target.value),
+                    onKeyDown: (e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        if (!busy) doExtract();
+                      }
+                    },
                   }),
                   h('div', { className: 'row', style: { display: 'flex', gap: 6 } },
                     h('button', {
@@ -1606,12 +1904,14 @@ window.__ModuleLoader__.load({
                       onClick: doExtract,
                       disabled: busy,
                     }, busy ? '解析中…' : '解析成思维树'),
+                    h('button', { className: 'ttl-btn', onClick: importFromClipboard, title: '从剪贴板导入' }, '剪贴板'),
                     h('button', {
                       className: 'ttl-btn',
                       onClick: () => setSource(SAMPLE_TEXT),
                       title: '载入示例',
                     }, '示例'),
                   ),
+                  h('div', { className: 'ttl-hint' }, 'Ctrl+Enter 解析 · 支持拖入 superpowers 计划，会自动识别 Task 结构'),
                   error ? h('div', { className: 'ttl-error' }, error) : null,
                   notice ? h('div', { className: 'ttl-notice' }, notice) : null,
 
@@ -1740,6 +2040,10 @@ window.__ModuleLoader__.load({
         treeToMermaid,
         lintTree,
         treeToAdr,
+        looksLikePlan,
+        parsePlanClient,
+        lintPlanClient,
+        planToTreeClient,
       };
     }
 
