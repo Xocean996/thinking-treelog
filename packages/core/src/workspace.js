@@ -254,6 +254,26 @@ const short = (text, max = 46) => {
 };
 
 /**
+ * How well-formed is a question? Numbers, a stated acceptance line, a reason,
+ * and no stacked goals. Same rules the panel uses, kept here so the terminal can
+ * report a trend without depending on the plugin.
+ *
+ * @param {string} text
+ */
+export function scoreQuestion(text) {
+  const value = String(text || '');
+  let score = 50;
+  if (/\d+/.test(value)) score += 10;
+  if (/优先|取舍|权衡|tradeoff/i.test(value)) score += 8;
+  if (/因为|所以|由于|因此/.test(value)) score += 8;
+  if (/(完成|验收|跑通|通过|输出|能用)/.test(value)) score += 14;
+  if (value.length >= 40) score += 8;
+  if (/同时|以及|还有|顺便/.test(value)) score -= 12;
+  if (!/(现在|目前|已经|现状|之前)/.test(value)) score -= 6;
+  return Math.max(10, Math.min(98, score));
+}
+
+/**
  * The thread of work: what the session has been about, turn by turn.
  *
  * @param {ReturnType<typeof analyzeConversation>} analysis

@@ -249,6 +249,7 @@ async function main() {
         cwd: typeof flags.cwd === 'string' ? flags.cwd : undefined,
         session: typeof flags.session === 'string' ? flags.session : undefined,
         format: typeof flags.format === 'string' ? flags.format : 'text',
+        demo: Boolean(flags.demo),
       });
       if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
       else process.stdout.write(`${text}\n`);

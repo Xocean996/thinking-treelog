@@ -39,30 +39,65 @@ Three things no other tool does together:
 
 ## Try it in 30 seconds
 
+No dsh history? Run the recorded demo — it uses the same pipeline as a live read:
+
+```bash
+npx @thinking-treelog/cli pulse --demo
+```
+
+```
+工作区脉络 · 给结算服务加一次重试
+  /demo/checkout-service
+  10 条消息 · 13 次工具调用
+
+在做什么（最近的提问）：
+   1. 支付回调偶尔丢，我想加重试。先看看现在是怎么处理的，别改任何东西。
+   2. QPS 200 时丢 0.3%，想 5 秒内重试 3 次。不要动下游幂等，验收：压测 1000 次零丢失…
+   3. 这个再优化一下
+   4. 跑一下压测，把 1000 次的失败数和 p99 都打出来。不通过就回滚。
+   5. 顺手把死信队列也接了吧，还有监控面板、告警规则，一并加上
+
+还没做完：
+  ○ 压测 1000 次验证零丢失
+  ○ 补一条回归测试
+
+建议：
+  1. ［superpowers］ 接着做完「压测 1000 次验证零丢失」
+     未完成的 todo 是唯一明确的下一步；别开新线。
+
+提问质量（最近 6 条，均值 53）：
+  ◐50 ●76 ○44 ◐68 ○32 ◐50
+```
+
+Note the last two lines. Question 2 scores **76** — it states a measurement, a bound, and
+an acceptance line. Question 5 scores **32** — it stacks four goals into one sentence.
+That gap is the whole point: the tool tells you which of your own questions wasted a round.
+
+With dsh history on the machine, drop `--demo`:
+
 ```bash
 npx @thinking-treelog/cli pulse
 ```
 
-No config, no account, no API key. It reads `~/.dsh/sessions` — the DeepSeek Harness
-session log — and prints the thread of your current work.
-
-Nothing there? Point it at a repo instead:
+Or read a repo instead of a conversation:
 
 ```bash
 npx @thinking-treelog/cli rhythm .
 ```
 
-```
-thinking-treelog — 项目节奏
-  14 次活动 · 1 个活跃日 · 跨度 1 天 · 日均 14
-当前：连续 1 天有改动
-阶段：
-  2026-10-23 → 2026-10-23  14 次  feature
-主线：
-  feature   13
-  fix        1
-建议：保持当前节奏，下一步接着「feat(panel): compact dock pill」推进。
-```
+## How it differs
+
+| | Reads your real session | Reviews your questions | Names the next move | No server, no key |
+|---|---|---|---|---|
+| **Thinking TreeLog** | ✅ decodes the log | ✅ score + rewrite | ✅ picks a skill | ✅ |
+| Chat log / export | ✅ but raw text | ❌ | ❌ | ✅ |
+| Obsidian Canvas, markmap | ❌ you draw by hand | ❌ | ❌ | ✅ |
+| LangSmith / Langfuse | ⚠️ only instrumented apps | ❌ traces, not questions | ❌ | ❌ hosted |
+| Prompt managers | ❌ snippets | ❌ | ❌ | ✅ |
+
+The claim is narrow and deliberate: **the transcript already holds the reasoning — this
+reads it back, scores how you asked, and names the next move.** It is not a canvas, not a
+tracer, and not a prompt library.
 
 ## What it ships as
 

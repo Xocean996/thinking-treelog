@@ -10,6 +10,7 @@
     "./engineering": "./src/engineering.js",
     "./plan": "./src/plan.js",
     "./rhythm": "./src/rhythm.js",
+    "./demo-session": "./src/demo-session.js",
     "./trace": "./src/trace.js",
     "./workspace": "./src/workspace.js"
   },

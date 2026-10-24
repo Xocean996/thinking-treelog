@@ -36,6 +36,7 @@ import {
   formatPulse,
   listWorkspaces,
   pickSession,
+  scoreQuestion,
   sessionsRoot,
   suggestNext,
   threadOf,
@@ -592,31 +593,49 @@ export async function rhythmReport(dir, options = {}) {
  * @param {{ cwd?: string, session?: string, format?: string }} [options]
  */
 export async function pulseReport(options = {}) {
-  const workspaces = listWorkspaces(sessionsRoot());
-  if (!workspaces.length) {
-    throw new Error('no session logs found under ~/.dsh/sessions — run this from a machine with dsh history');
+  let records;
+  let sessionId = 'session-demo';
+  let workspace = 'demo';
+
+  if (options.demo) {
+    const { DEMO_RECORDS } = await import('@thinking-treelog/core/demo-session');
+    records = DEMO_RECORDS;
+  } else {
+    const workspaces = listWorkspaces(sessionsRoot());
+    if (!workspaces.length) {
+      throw new Error(
+        'no session logs under ~/.dsh/sessions — try `treelog pulse --demo` to see what this prints',
+      );
+    }
+    const picked = pickSession(workspaces, {
+      cwd: options.cwd || process.cwd(),
+      sessionId: options.session,
+    });
+    if (!picked) throw new Error('no matching session — try `treelog pulse --demo`');
+    records = decodeSession(picked.session.file);
+    sessionId = picked.session.id;
+    workspace = picked.workspace;
   }
 
-  const picked = pickSession(workspaces, {
-    cwd: options.cwd || process.cwd(),
-    sessionId: options.session,
-  });
-  if (!picked) throw new Error('no matching session');
-
-  const analysis = analyzeConversation(decodeSession(picked.session.file));
+  const analysis = analyzeConversation(records);
   const suggestions = suggestNext(analysis);
+  const scores = analysis.userMessages.map((message) => scoreQuestion(message.text));
 
   if (options.format === 'json') {
     return JSON.stringify(
       {
-        session: picked.session.id,
-        workspace: picked.workspace,
+        session: sessionId,
+        workspace,
         title: analysis.title,
         turns: analysis.turns,
         toolCalls: analysis.toolCalls,
         tools: analysis.tools,
         todos: analysis.todos,
         thread: threadOf(analysis),
+        scores,
+        averageScore: scores.length
+          ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+          : 0,
         suggestions,
       },
       null,
@@ -624,7 +643,17 @@ export async function pulseReport(options = {}) {
     );
   }
 
-  return formatPulse(analysis, suggestions, { thread: threadOf(analysis) });
+  const body = formatPulse(analysis, suggestions, { thread: threadOf(analysis) });
+  if (!scores.length) return body;
+
+  const average = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  const arrow = (n) => (n >= 70 ? '●' : n >= 45 ? '◐' : '○');
+  const trend = scores
+    .slice(-8)
+    .map((score) => `${arrow(score)}${score}`)
+    .join(' ');
+
+  return `${body}\n\n提问质量（最近 ${Math.min(8, scores.length)} 条，均值 ${average}）：\n  ${trend}`;
 }
 
 /**
