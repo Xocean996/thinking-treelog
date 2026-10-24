@@ -101,7 +101,8 @@ window.__ModuleLoader__.load({
       const dot = filename.lastIndexOf('.');
       const stem = dot > 0 ? filename.slice(0, dot) : filename;
       const ext = dot > 0 ? filename.slice(dot) : '';
-      const safe = `${stem.slice(0, 48)}${ext}`;
+      // Code points again: slicing by units cuts an emoji in half.
+      const safe = `${Array.from(stem).slice(0, 48).join('')}${ext}`;
 
       const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);

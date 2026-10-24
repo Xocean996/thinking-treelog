@@ -600,12 +600,15 @@ export async function rhythmReport(dir, options = {}) {
  * Turn a plain chat transcript into session records.
  *
  * There is no role information in a plain export, so every block is treated as a
- * prompt — which is exactly what the question review needs. Timestamps come from
- * a fixed base so the same file always produces the same report.
+ * prompt — which is exactly what the question review needs. `now` is injectable
+ * so tests can pin the clock; callers pass Date.now() by default, otherwise a
+ * pasted transcript looks months stale.
  *
  * @param {string} text
+ * @param {{ now?: number }} [options]
  */
-export function textToRecords(text) {
+export function textToRecords(text, options = {}) {
+  const now = options.now ?? Date.now();
   const raw = String(text || '');
   const blankBlocks = raw
     .split(/\n\s*\n/)
@@ -623,7 +626,7 @@ export function textToRecords(text) {
   return blocks.map((block, index) => ({
     type: 'user/message',
     seq: index + 1,
-    time: BASE_TIME + index * 60_000,
+    time: now - (blocks.length - index) * 60_000,
     data: { content: [{ type: 'text', text: block }] },
   }));
 }
@@ -648,18 +651,27 @@ export async function resolveSessionRecords(options = {}) {
     const buffer = await read(options.file);
     const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(String(buffer), 'utf8');
 
-    // A docx or an image handed to --file produces gibberish that still "scores".
-    const sample = bytes.subarray(0, 4096);
-    const nul = sample.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0);
-    if (nul > 0 || nul / Math.max(1, sample.length) > 0.05) {
-      throw new Error(
-        `${options.file} looks like a binary file (${Math.round((nul / Math.max(1, sample.length)) * 100)}% NUL bytes). ` +
-          '--file expects a text export.',
-      );
+    // UTF-16 text is text even though half its bytes are NUL — check the BOM first.
+    const hasUtf16Bom =
+      bytes.length >= 2 &&
+      ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff));
+
+    if (!hasUtf16Bom) {
+      // A docx or an image handed to --file produces gibberish that still "scores".
+      const sample = bytes.subarray(0, 4096);
+      const nul = sample.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0);
+      // Any NUL is enough for a text file — a PNG has only ~1% but is still bytes.
+      if (nul > 0) {
+        throw new Error(
+          `${options.file} looks like a binary file ` +
+            `(${Math.round((nul / Math.max(1, sample.length)) * 100)}% NUL bytes). ` +
+            '--file expects a text export.',
+        );
+      }
     }
 
-    const raw = bytes.toString('utf8');
-    const records = textToRecords(raw);
+    const raw = hasUtf16Bom ? bytes.toString('utf16le').replace(/^\uFEFF/, '') : bytes.toString('utf8');
+    const records = textToRecords(raw, { now: options.now });
     if (!records.length) throw new Error(`${options.file} has no turns (blank line or line separated)`);
     return { records, sessionId: options.file, workspace: basename(options.file) };
   }
