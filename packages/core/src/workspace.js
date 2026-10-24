@@ -299,16 +299,19 @@ export function reviewQuestion(text) {
   const pros = [];
   const cons = [];
 
-  if (/\d+/.test(value)) pros.push('带了具体数字或规模');
-  if (/优先|取舍|权衡|tradeoff/i.test(value)) pros.push('有取舍意识');
-  if (/因为|所以|由于|因此/.test(value)) pros.push('给了理由');
-  if (/不要|避免|别|除了/.test(value)) pros.push('划了边界');
-  if (value.length >= 40) pros.push('描述足够完整');
+  if (/\d+/.test(value)) pros.push('带了具体数字或规模，可以据此判断');
+  if (/优先|取舍|权衡|tradeoff/i.test(value)) pros.push('有取舍意识，不是全都要');
+  if (/因为|所以|由于|因此/.test(value)) pros.push('给了理由，不只是下结论');
+  if (/不要|避免|别|除了/.test(value)) pros.push('划了边界，说明不做什么');
+  if (value.length >= 40) pros.push('描述足够完整，场景能还原');
+  if (!pros.length) pros.push('意图清楚，方向可辨');
 
-  if (value.length < 20) cons.push('信息量偏少');
-  if (!/(完成|验收|跑通|通过|输出|能用)/.test(value)) cons.push('没有验收标准');
-  if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标');
-  if (!/(现在|目前|已经|现状|之前)/.test(value)) cons.push('没交代现状');
+  if (value.length < 20) cons.push('信息量偏少，缺上下文');
+  if (!/(完成|验收|跑通|通过|输出|能用)/.test(value)) cons.push('没有验收标准，"做完"无法判断');
+  if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标，容易只做一半');
+  if (!/(现在|目前|已经|现状|之前)/.test(value)) cons.push('没交代现状，看不出差距');
+  if (stage === 'design' && !/(方案|选项|备选|对比)/.test(value)) cons.push('只要一个答案，没留备选');
+  if (!cons.length) cons.push('缺少明确的下一步指向');
 
   const acceptance = {
     design: '完成时能拿出 2 个备选，并说明各自代价',

@@ -11,16 +11,20 @@
  */
 
 import { createServer } from 'node:http';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { zstdDecompressSync } from 'node:zlib';
+import { readdirSync, statSync } from 'node:fs';
+import { open, readFile } from 'node:fs/promises';
+import { zstdDecompress } from 'node:zlib';
+import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+const zstdDecompressAsync = promisify(zstdDecompress);
 
 const VERSION = '0.4.0';
 const PORT = Number(process.env.TTL_PORT) || 17866;
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;
-const NOISE_RE =
+export const NOISE_RE =
   /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|This is an automatically generated checkpoint|\[model changed:|\[skill\])/i;
 
 const short = (text, max = 40) => {
@@ -28,12 +32,19 @@ const short = (text, max = 40) => {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 };
 
-function sessionsRoot() {
+export function sessionsRoot() {
   return join(homedir(), '.dsh', 'sessions');
 }
 
-function decodeSession(file, maxFrames = 1500, headFrames = 6) {
-  const buf = readFileSync(file);
+/**
+ * Decode the tail (plus the head) of a session log without freezing the Host.
+ *
+ * Decompression is CPU-bound and this runs inside the dsh main process, so each
+ * frame goes through the async zstd API in small batches: the event loop gets a
+ * turn between batches instead of stalling for a second.
+ */
+export async function decodeSession(file, maxFrames = 1500, headFrames = 6) {
+  const buf = await readFile(file);
   const offsets = [];
   let at = buf.indexOf(MAGIC);
   while (at !== -1) {
@@ -46,11 +57,24 @@ function decodeSession(file, maxFrames = 1500, headFrames = 6) {
   for (let i = 0; i < Math.min(headFrames, offsets.length); i += 1) wanted.add(i);
   for (let i = Math.max(0, offsets.length - maxFrames); i < offsets.length; i += 1) wanted.add(i);
 
+  const order = [...wanted].sort((a, b) => a - b);
   const records = [];
-  for (const i of [...wanted].sort((a, b) => a - b)) {
-    const end = i + 1 < offsets.length ? offsets[i + 1] : buf.length;
-    try {
-      const text = zstdDecompressSync(buf.subarray(offsets[i], end)).toString('utf8');
+  const BATCH = 24;
+
+  for (let start = 0; start < order.length; start += BATCH) {
+    const batch = order.slice(start, start + BATCH);
+    const decoded = await Promise.all(
+      batch.map(async (i) => {
+        const end = i + 1 < offsets.length ? offsets[i + 1] : buf.length;
+        try {
+          return (await zstdDecompressAsync(buf.subarray(offsets[i], end))).toString('utf8');
+        } catch {
+          return '';
+        }
+      }),
+    );
+    for (const text of decoded) {
+      if (!text) continue;
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
         try {
@@ -59,15 +83,73 @@ function decodeSession(file, maxFrames = 1500, headFrames = 6) {
           /* ignore */
         }
       }
-    } catch {
-      /* ignore a bad frame */
     }
+    await new Promise((resolve) => setImmediate(resolve));
   }
+
   records.sort((a, b) => (a.time || 0) - (b.time || 0) || (a.seq || 0) - (b.seq || 0));
   return records;
 }
 
-function listWorkspaces(root) {
+/** Only the first frame: the session header. Cheap enough for a directory scan. */
+export async function readSessionHeader(file) {
+  const handle = await open(file, 'r');
+  try {
+    const probe = Buffer.alloc(256 * 1024);
+    const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    if (!bytesRead) return null;
+    const slice = probe.subarray(0, bytesRead);
+    const second = slice.indexOf(MAGIC, 4);
+    const frame = second === -1 ? slice : slice.subarray(0, second);
+    try {
+      const text = (await zstdDecompressAsync(frame)).toString('utf8');
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const record = JSON.parse(line);
+          if (record.type === 'session') return record;
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Titles are re-read on every panel open; key them by file + mtime. */
+const titleCache = new Map();
+
+export async function sessionTitle(file, mtime) {
+  const key = `${file}:${mtime}`;
+  const cached = titleCache.get(key);
+  if (cached !== undefined) return cached;
+
+  let title = '';
+  try {
+    const head = await decodeSession(file, 10, 10);
+    const record = head.find((r) => r.type === 'session/title');
+    if (record && record.data && record.data.title) title = record.data.title;
+    if (!title) {
+      const firstAsk = head.find((r) => r.type === 'user/message');
+      if (firstAsk) title = short(textOf(firstAsk.data && firstAsk.data.content), 22);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  titleCache.set(key, title);
+  if (titleCache.size > 400) {
+    titleCache.delete(titleCache.keys().next().value);
+  }
+  return title;
+}
+
+export function listWorkspaces(root) {
   const out = [];
   let entries = [];
   try {
@@ -112,7 +194,7 @@ function listWorkspaces(root) {
   return out;
 }
 
-function pickSession(workspaces, wantCwd, sessionId) {
+export async function pickSession(workspaces, wantCwd, sessionId) {
   if (sessionId) {
     for (const entry of workspaces) {
       const found = entry.sessions.find((session) => session.id === sessionId);
@@ -125,11 +207,11 @@ function pickSession(workspaces, wantCwd, sessionId) {
     for (const entry of workspaces) {
       for (const session of entry.sessions) {
         try {
-          const head = decodeSession(session.file, { maxFrames: 2, headFrames: 2 });
-          const sessionRecord = head.find((r) => r.type === 'session');
+          // The header alone is enough to match a cwd, and it is one frame.
+          const header = await readSessionHeader(session.file);
           const cwd =
-            sessionRecord && typeof sessionRecord.cwd === 'string'
-              ? sessionRecord.cwd.toLowerCase().replace(/[\\/]+$/, '')
+            header && typeof header.cwd === 'string'
+              ? header.cwd.toLowerCase().replace(/[\\/]+$/, '')
               : '';
           if (cwd && (cwd === target || cwd.startsWith(target) || target.startsWith(cwd))) {
             return { workspace: entry.workspace, session };
@@ -152,7 +234,7 @@ const textOf = (parts) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-function analyze(records) {
+export function analyze(records) {
   let session = null;
   let title = '';
   let lastAt = null;
@@ -215,7 +297,7 @@ function analyze(records) {
   };
 }
 
-function suggestNext(analysis, now = Date.now()) {
+export function suggestNext(analysis, now = Date.now()) {
   const out = [];
   const pending = (analysis.todos || []).filter((t) => t && t.status !== 'completed');
 
@@ -274,7 +356,7 @@ function suggestNext(analysis, now = Date.now()) {
  * skill that owns that stage. This is what makes a node self-check rather than
  * just display.
  */
-function stageOf(text) {
+export function classifyStage(text) {
   const value = String(text || '');
   if (/报错|错误|bug|失败|调试|排查|不工作|fix|error|debug|broken/i.test(value)) {
     return {
@@ -323,7 +405,7 @@ function stageOf(text) {
  * the concrete next move. Deterministic on purpose — a review that changes every
  * time you look is not a review.
  */
-function reviewOf(text, stage) {
+export function reviewOf(text, stage) {
   const value = String(text || '');
   const pros = [];
   const cons = [];
@@ -382,14 +464,14 @@ function reviewOf(text, stage) {
 
   return {
     pros: pros.slice(0, 3),
-    cons: cons.slice(0, 3),
+    cons,
     next: next.slice(0, 3),
     score,
     rewrite,
   };
 }
 
-function pulseToTree(analysis, suggestions) {
+export function pulseToTree(analysis, suggestions) {
   const nodes = [];
   const now = Date.now();
   let seq = 0;
@@ -429,7 +511,7 @@ function pulseToTree(analysis, suggestions) {
     '按时间顺序读：每一问都是这条线的一个节点。',
   );
   analysis.userMessages.slice(-8).forEach((message, index) => {
-    const stage = stageOf(message.text);
+    const stage = classifyStage(message.text);
     const review = reviewOf(message.text, stage.stage);
     push(
       threadNode.id,
@@ -565,28 +647,26 @@ async function handle(req, res) {
   if (url.pathname === '/sessions') {
     try {
       const workspaces = listWorkspaces(sessionsRoot());
-      return send(res, 200, {
-        ok: true,
-        workspaces: workspaces.slice(0, 12).map((entry) => ({
-          workspace: entry.workspace,
-          cwd: decodeSession(entry.sessions[0].file, 2, 2).find((r) => r.type === 'session')?.cwd || '',
-          sessions: entry.sessions.slice(0, 20).map((session) => {
-            let title = '';
-            try {
-              const head = decodeSession(session.file, 10, 10);
-              const record = head.find((r) => r.type === 'session/title');
-              if (record && record.data && record.data.title) title = record.data.title;
-              if (!title) {
-                const firstAsk = head.find((r) => r.type === 'user/message');
-                if (firstAsk) title = short(textOf(firstAsk.data && firstAsk.data.content), 22);
-              }
-            } catch {
-              /* ignore */
-            }
-            return { id: session.id, title, mtime: session.mtime };
-          }),
-        })),
-      });
+      const payload = [];
+      for (const entry of workspaces.slice(0, 12)) {
+        let cwd = '';
+        try {
+          const header = await readSessionHeader(entry.sessions[0].file);
+          cwd = (header && header.cwd) || '';
+        } catch {
+          /* ignore */
+        }
+        const sessions = [];
+        for (const session of entry.sessions.slice(0, 20)) {
+          sessions.push({
+            id: session.id,
+            title: await sessionTitle(session.file, session.mtime),
+            mtime: session.mtime,
+          });
+        }
+        payload.push({ workspace: entry.workspace, cwd, sessions });
+      }
+      return send(res, 200, { ok: true, workspaces: payload });
     } catch (error) {
       return send(res, 500, { ok: false, error: String(error && error.message) });
     }
@@ -602,10 +682,10 @@ async function handle(req, res) {
 
     const cwd = url.searchParams.get('cwd') || process.cwd();
     const sessionId = url.searchParams.get('session') || '';
-    const picked = pickSession(workspaces, cwd, sessionId || undefined);
+    const picked = await pickSession(workspaces, cwd, sessionId || undefined);
     if (!picked) return send(res, 404, { ok: false, error: 'no matching session' });
 
-    const records = decodeSession(picked.session.file);
+    const records = await decodeSession(picked.session.file);
     const analysis = analyze(records);
     const suggestions = suggestNext(analysis);
     const tree = pulseToTree(analysis, suggestions);

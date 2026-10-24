@@ -43,6 +43,9 @@ import {
   threadOf,
 } from '@thinking-treelog/core/workspace';
 
+/** Fixed clock for pasted transcripts, so the same file always reports the same. */
+const BASE_TIME = Date.UTC(2026, 0, 1);
+
 export const EXIT_CODES = { ok: 0, findings: 1, usage: 2 };
 
 const defaultReadFile = (path) => fsReadFile(path, 'utf8');
@@ -596,23 +599,31 @@ export async function rhythmReport(dir, options = {}) {
 /**
  * Turn a plain chat transcript into session records.
  *
- * Blank-line separated blocks become turns. There is no role information in a
- * plain export, so every block is treated as a prompt — which is exactly what the
- * question review needs.
+ * There is no role information in a plain export, so every block is treated as a
+ * prompt — which is exactly what the question review needs. Timestamps come from
+ * a fixed base so the same file always produces the same report.
  *
  * @param {string} text
- * @param {{ spaced?: boolean }} [options] `spaced` is for JSON-lines records.
  */
 export function textToRecords(text) {
-  const blocks = String(text || '')
-    .split(/\n{2,}/)
+  const raw = String(text || '');
+  const blankBlocks = raw
+    .split(/\n\s*\n/)
     .map((block) => block.trim())
-    .filter((block) => block.length > 0);
+    .filter(Boolean);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  // Most exports are one turn per line, not blank-line separated. Only trust the
+  // blank-line split when there are actually several blocks to speak of.
+  const blocks = blankBlocks.length >= 2 ? blankBlocks : lines;
 
   return blocks.map((block, index) => ({
     type: 'user/message',
     seq: index + 1,
-    time: Date.now() - (blocks.length - index) * 60_000,
+    time: BASE_TIME + index * 60_000,
     data: { content: [{ type: 'text', text: block }] },
   }));
 }

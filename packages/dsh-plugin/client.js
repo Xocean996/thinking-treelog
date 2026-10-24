@@ -60,6 +60,7 @@ window.__ModuleLoader__.load({
 
     const TREES_KEY = 'ttl.trees.v1';
     const SETTINGS_KEY = 'ttl.settings.v1';
+    const APIKEY_SESSION_KEY = 'ttl.llm.key';
 
     const SAMPLE_TEXT = `我们应该把思维树做成 dsh 插件，而不是独立网站。
 因为用户不会为了复盘一次对话专门打开一个新网站，而插件可以出现在他们已经在工作的地方。
@@ -1159,14 +1160,34 @@ window.__ModuleLoader__.load({
     function loadSettings() {
       const parsed = readJson(SETTINGS_KEY) || {};
       const llm = parsed.llm || {};
+      // The key is never written to localStorage: it lives for the tab session.
+      let key = '';
+      try {
+        key = window.sessionStorage.getItem(APIKEY_SESSION_KEY) || '';
+      } catch (error) {
+        key = '';
+      }
       return {
         llm: {
           baseUrl: typeof llm.baseUrl === 'string' ? llm.baseUrl : 'https://api.openai.com/v1',
-          apiKey: typeof llm.apiKey === 'string' ? llm.apiKey : '',
+          apiKey: key,
           model: typeof llm.model === 'string' ? llm.model : 'gpt-4o-mini',
         },
         mode: parsed.mode === 'rule' || parsed.mode === 'llm' ? parsed.mode : 'auto',
       };
+    }
+
+    function saveSettings(next) {
+      const llm = (next && next.llm) || {};
+      try {
+        window.sessionStorage.setItem(APIKEY_SESSION_KEY, String(llm.apiKey || ''));
+      } catch (error) {
+        /* private mode: the key simply will not survive a reload */
+      }
+      writeJson(SETTINGS_KEY, {
+        ...next,
+        llm: { ...llm, apiKey: '' },
+      });
     }
 
     /* ------------------------------------------------------------------ *
@@ -1582,7 +1603,8 @@ window.__ModuleLoader__.load({
         if (latest.extractor === 'workspace') return 0;
         try {
           if (latest.extractor === 'plan') {
-            return lintPlanClient(parsePlanClient(latest.source || '')).length;
+            // Plan findings are per task; a big plan would show a scary number.
+            return Math.min(lintPlanClient(parsePlanClient(latest.source || '')).length, 99);
           }
           return lintTree(latest.nodes).length;
         } catch (error) {
@@ -2474,7 +2496,7 @@ window.__ModuleLoader__.load({
       const errorCount = findings.filter((f) => f.severity === 'error').length;
 
       useEffect(() => {
-        writeJson(SETTINGS_KEY, settings);
+        saveSettings(settings);
       }, [settings]);
 
       useEffect(() => {
@@ -2814,12 +2836,22 @@ window.__ModuleLoader__.load({
 
         // Prefer handing the text to the composer; fall back to the clipboard.
         let handed = false;
-        try {
-          if (typeof window.__ttlCompose === 'function') {
-            handed = window.__ttlCompose(target.annotation) === true;
+        const tryCompose = () => {
+          try {
+            if (typeof window.__ttlCompose === 'function') {
+              return window.__ttlCompose(target.annotation) === true;
+            }
+          } catch (error) {
+            /* ignore */
           }
-        } catch (err) {
-          handed = false;
+          return false;
+        };
+
+        handed = tryCompose();
+        if (!handed) {
+          // The dock may not have mounted yet; give it one frame then retry.
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          handed = tryCompose();
         }
 
         if (handed) {

@@ -193,8 +193,8 @@ test('stageOf maps questions to work stages', () => {
 
 test('reviewQuestion names what is missing and offers a rewrite', () => {
   const review = reviewQuestion('这个再优化一下');
-  assert.ok(review.cons.includes('没有验收标准'));
-  assert.ok(review.cons.includes('信息量偏少'));
+  assert.ok(review.cons.some((item) => item.includes('验收标准')));
+  assert.ok(review.cons.some((item) => item.includes('信息量')));
   assert.match(review.rewrite, /验收：/);
   assert.match(review.rewrite, /约束：/);
 });

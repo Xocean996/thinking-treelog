@@ -338,16 +338,32 @@ export async function callTool(name, args = {}) {
     }
 
     case 'workspace_pulse': {
-      const workspaces = listWorkspaces(sessionsRoot());
+      let workspaces = [];
+      try {
+        workspaces = listWorkspaces(sessionsRoot());
+      } catch {
+        workspaces = [];
+      }
+
+      // An empty machine is not something the caller can fix by retrying, so say
+      // what it means and what to use instead of throwing.
       if (!workspaces.length) {
-        throw new Error('no dsh session logs found under ~/.dsh/sessions');
+        return textResult(
+          '这台机器上没有 dsh 会话记录（~/.dsh/sessions 为空或不存在）。\n\n' +
+            '不是 DeepSeek Harness 用户？换一条路：\n' +
+            '- `treelog pulse --file <transcript.txt>`：把导出的对话按行/空行切块后分析；\n' +
+            '- `treelog pulse --demo`：看一段录好的示例会话；\n' +
+            '- 或者直接用 build_thought_tree / lint_thought_tree 处理文本。',
+        );
       }
 
       const picked = pickSession(workspaces, {
         cwd: typeof args?.cwd === 'string' && args.cwd.trim() ? args.cwd : process.cwd(),
         sessionId: typeof args?.sessionId === 'string' ? args.sessionId : undefined,
       });
-      if (!picked) throw new Error('no matching session found');
+      if (!picked) {
+        return textResult('没能匹配到会话。用 sessionId 指定一个，或检查 cwd 是否正确。');
+      }
 
       const records = decodeSession(picked.session.file, { maxFrames: 300, headFrames: 6 });
       const analysis = analyzeConversation(records);
