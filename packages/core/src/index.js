@@ -407,13 +407,16 @@ export function pathTo(graph, id) {
   /** @type {ThoughtNode[]} */
   const path = [];
   let cursor = /** @type {string|null} */ (id);
-  let guard = 0;
-  while (cursor !== null && guard <= graph.nodeMap.size) {
+  const seen = new Set();
+  while (cursor !== null) {
+    // A cycle would otherwise repeat nodes until the guard trips, returning a
+    // path with duplicates. Stop at the first repeat instead.
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
     const node = graph.nodeMap.get(cursor);
     if (!node) break;
     path.unshift(node);
     cursor = node.parentId;
-    guard += 1;
   }
   return path;
 }

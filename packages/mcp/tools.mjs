@@ -222,6 +222,30 @@ function textResult(text) {
   return { content: [{ type: 'text', text }] };
 }
 
+/** The MCP server is single-threaded: a huge string blocks every other call. */
+const MAX_TEXT = 400_000;
+
+function guardSize(args) {
+  for (const field of ['text', 'plan', 'spec', 'tree']) {
+    const value = args && args[field];
+    const length =
+      typeof value === 'string'
+        ? value.length
+        : value && typeof value === 'object'
+          ? JSON.stringify(value).length
+          : 0;
+    if (length > MAX_TEXT) {
+      throw new Error(
+        `${field} is ${length} characters, over the ${MAX_TEXT} limit. ` +
+          'Split the input and call again.',
+      );
+    }
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} args
+ */
 function asNodes(args) {
   // Be explicit about where nodes come from: `args.tree ?? args` used to swallow
   // any other argument object and report an unrelated "nodes" error.
@@ -251,6 +275,8 @@ function asTitle(args, nodes) {
  * @param {Record<string, unknown>} args
  */
 export async function callTool(name, args = {}) {
+  guardSize(args);
+
   switch (name) {
     case 'build_thought_tree': {
       const text = String(args?.text ?? '');
@@ -376,7 +402,8 @@ export async function callTool(name, args = {}) {
         return textResult('没能匹配到会话。用 sessionId 指定一个，或检查 cwd 是否正确。');
       }
 
-      const records = decodeSession(picked.session.file, { maxFrames: 300, headFrames: 6 });
+      // Match the Host's budget: a long session must not look shorter here.
+      const records = decodeSession(picked.session.file, { maxFrames: 1500, headFrames: 6 });
       const analysis = analyzeConversation(records);
       const suggestions = suggestNext(analysis);
       const maxThreads = Number.isFinite(Number(args?.maxThreads)) ? Number(args.maxThreads) : 8;

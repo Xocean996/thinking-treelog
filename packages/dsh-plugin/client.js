@@ -89,20 +89,29 @@ window.__ModuleLoader__.load({
     }
 
     function truncate(text, max) {
-      const s = String(text || '');
-      return s.length > max ? `${s.slice(0, max)}…` : s;
+      // Count code points: `slice` on a string cuts UTF-16 units and can split an
+      // emoji into two lone surrogates, which renders as garbage.
+      const chars = Array.from(String(text || ''));
+      return chars.length > max ? `${chars.slice(0, max).join('')}…` : chars.join('');
     }
 
     function download(filename, content, mime) {
+      // Windows caps a path at 260 chars; a long tree title used to fail the
+      // save silently. Keep the stem short and keep the extension.
+      const dot = filename.lastIndexOf('.');
+      const stem = dot > 0 ? filename.slice(0, dot) : filename;
+      const ext = dot > 0 ? filename.slice(dot) : '';
+      const safe = `${stem.slice(0, 48)}${ext}`;
+
       const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = safe;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
     /* ------------------------------------------------------------------ *
@@ -3142,12 +3151,18 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'ttl-nav-inline' },
               h('button', {
-                title: '回到根节点 (Home)',
+                title:
+                  graph.roots.length > 1
+                    ? `切换根节点（共 ${graph.roots.length} 个）`
+                    : '回到根节点 (Home)',
                 onClick: () => {
-                  const rootId = graph.roots[0];
-                  if (!rootId) return;
-                  setSelectedId(rootId);
-                  if (canvasApi.current) canvasApi.current.focusNode(rootId, true);
+                  if (!graph.roots.length) return;
+                  // Deleting a root leaves several roots; cycling reaches them all
+                  // instead of always landing on the first one.
+                  const at = graph.roots.indexOf(selectedId);
+                  const next = graph.roots[(at + 1) % graph.roots.length];
+                  setSelectedId(next);
+                  if (canvasApi.current) canvasApi.current.focusNode(next, true);
                 },
               }, '⌂'),
               h('button', {

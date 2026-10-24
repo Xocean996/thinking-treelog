@@ -249,8 +249,9 @@ export function pickSession(workspaces, want = {}) {
 }
 
 const short = (text, max = 46) => {
-  const value = String(text || '').replace(/\s+/g, ' ').trim();
-  return value.length > max ? `${value.slice(0, max)}…` : value;
+  // Count code points, not UTF-16 units: `slice` splits emoji into lone surrogates.
+  const chars = Array.from(String(text == null ? '' : text).replace(/\s+/g, ' ').trim());
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : chars.join('');
 };
 
 /**

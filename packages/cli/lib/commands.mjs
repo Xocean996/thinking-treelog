@@ -628,37 +628,63 @@ export function textToRecords(text) {
   }));
 }
 
-export async function pulseReport(options = {}) {
-  let records;
-  let sessionId = 'session-demo';
-  let workspace = 'demo';
-
+/**
+ * Resolve session records from --demo, --file, or the live dsh log.
+ *
+ * One implementation, because pulse and retro each grew their own copy of this
+ * branch and they were already drifting.
+ *
+ * @param {{ demo?: boolean, file?: string, cwd?: string, session?: string, readFile?: Function }} options
+ * @returns {Promise<{ records: any[], sessionId: string, workspace: string }>}
+ */
+export async function resolveSessionRecords(options = {}) {
   if (options.demo) {
     const { DEMO_RECORDS } = await import('@thinking-treelog/core/demo-session');
-    records = DEMO_RECORDS;
-  } else if (options.file) {
+    return { records: DEMO_RECORDS, sessionId: 'session-demo', workspace: 'demo' };
+  }
+
+  if (options.file) {
     const read = options.readFile || fsReadFile;
-    const raw = String(await read(options.file, 'utf8'));
-    records = textToRecords(raw);
-    sessionId = options.file;
-    workspace = basename(options.file);
-    if (!records.length) throw new Error(`${options.file} has no blank-line separated turns`);
-  } else {
-    const workspaces = listWorkspaces(sessionsRoot());
-    if (!workspaces.length) {
+    const buffer = await read(options.file);
+    const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(String(buffer), 'utf8');
+
+    // A docx or an image handed to --file produces gibberish that still "scores".
+    const sample = bytes.subarray(0, 4096);
+    const nul = sample.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0);
+    if (nul > 0 || nul / Math.max(1, sample.length) > 0.05) {
       throw new Error(
-        'no session logs under ~/.dsh/sessions — try `treelog pulse --demo`, or --file <transcript.txt>',
+        `${options.file} looks like a binary file (${Math.round((nul / Math.max(1, sample.length)) * 100)}% NUL bytes). ` +
+          '--file expects a text export.',
       );
     }
-    const picked = pickSession(workspaces, {
-      cwd: options.cwd || process.cwd(),
-      sessionId: options.session,
-    });
-    if (!picked) throw new Error('no matching session — try `treelog pulse --demo`');
-    records = decodeSession(picked.session.file);
-    sessionId = picked.session.id;
-    workspace = picked.workspace;
+
+    const raw = bytes.toString('utf8');
+    const records = textToRecords(raw);
+    if (!records.length) throw new Error(`${options.file} has no turns (blank line or line separated)`);
+    return { records, sessionId: options.file, workspace: basename(options.file) };
   }
+
+  const workspaces = listWorkspaces(sessionsRoot());
+  if (!workspaces.length) {
+    throw new Error(
+      'no session logs under ~/.dsh/sessions — try `treelog pulse --demo`, or --file <transcript.txt>',
+    );
+  }
+  const picked = pickSession(workspaces, {
+    cwd: options.cwd || process.cwd(),
+    sessionId: options.session,
+  });
+  if (!picked) throw new Error('no matching session — try `treelog pulse --demo`');
+
+  return {
+    records: decodeSession(picked.session.file),
+    sessionId: picked.session.id,
+    workspace: picked.workspace,
+  };
+}
+
+export async function pulseReport(options = {}) {
+  const { records, sessionId, workspace } = await resolveSessionRecords(options);
 
   const analysis = analyzeConversation(records);
   const suggestions = suggestNext(analysis);
@@ -705,29 +731,8 @@ export async function pulseReport(options = {}) {
  * @param {{ demo?: boolean, file?: string, cwd?: string, session?: string, readFile?: Function }} [options]
  */
 export async function retroReport(options = {}) {
-  const analysis = await (async () => {
-    if (options.demo) {
-      const { DEMO_RECORDS } = await import('@thinking-treelog/core/demo-session');
-      return analyzeConversation(DEMO_RECORDS);
-    }
-    if (options.file) {
-      const read = options.readFile || fsReadFile;
-      const raw = String(await read(options.file, 'utf8'));
-      return analyzeConversation(textToRecords(raw));
-    }
-    const workspaces = listWorkspaces(sessionsRoot());
-    if (!workspaces.length) {
-      throw new Error('no session logs — try `treelog retro --demo`');
-    }
-    const picked = pickSession(workspaces, {
-      cwd: options.cwd || process.cwd(),
-      sessionId: options.session,
-    });
-    if (!picked) throw new Error('no matching session — try `treelog retro --demo`');
-    return analyzeConversation(decodeSession(picked.session.file));
-  })();
-
-  return formatRetro(analysis);
+  const { records } = await resolveSessionRecords(options);
+  return formatRetro(analyzeConversation(records));
 }
 
 /**

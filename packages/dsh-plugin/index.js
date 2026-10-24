@@ -28,8 +28,9 @@ export const NOISE_RE =
   /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|This is an automatically generated checkpoint|\[model changed:|\[skill\])/i;
 
 const short = (text, max = 40) => {
-  const value = String(text || '').replace(/\s+/g, ' ').trim();
-  return value.length > max ? `${value.slice(0, max)}…` : value;
+  // Code points, not UTF-16 units.
+  const chars = Array.from(String(text == null ? '' : text).replace(/\s+/g, ' ').trim());
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : chars.join('');
 };
 
 export function sessionsRoot() {
