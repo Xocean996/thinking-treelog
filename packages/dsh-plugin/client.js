@@ -1546,6 +1546,21 @@ window.__ModuleLoader__.load({
         margin-left: 6px; font-size: 9px; font-weight: 400;
         letter-spacing: 0; opacity: 0.6; text-transform: none;
       }
+      .ttl-sourcecard {
+        position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%);
+        width: min(620px, calc(100vw - 80px)); max-height: 46vh; z-index: 70;
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px; border-radius: 14px;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #17191f) 94%, transparent);
+        backdrop-filter: blur(22px) saturate(1.3);
+        border: 1px solid color-mix(in srgb, #2f6feb 38%, transparent);
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.4);
+      }
+      .ttl-sourcecard-body {
+        font-size: 12px; line-height: 1.7; white-space: pre-wrap;
+        overflow: auto; max-height: 32vh;
+        color: var(--dsw-alias-label-primary, #e8ebf2);
+      }
       .ttl-score { margin-left: auto; font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
       .ttl-deep {
         padding: 9px 11px; border-radius: 11px; font-size: 11px; line-height: 1.6;
@@ -2633,6 +2648,7 @@ window.__ModuleLoader__.load({
       const [focusMode, setFocusMode] = useState(false);
       const [sessionOptions, setSessionOptions] = useState([]);
       const [targetSession, setTargetSession] = useState('');
+      const [sourceCard, setSourceCard] = useState(null);
 
       const refreshSessions = useCallback(() => {
         fetch('http://127.0.0.1:17866/sessions', { cache: 'no-store' })
@@ -3064,15 +3080,23 @@ window.__ModuleLoader__.load({
         }
 
         // Belt and braces: if the service is missing or rejects, click the
-        // visible 对话 tab. Two independent paths, because a silent failure here
-        // is indistinguishable from "double-click does nothing".
+        // visible 对话 tab. Several dispatch types, because the tab may listen
+        // for pointer events rather than click.
         try {
-          const tabs = document.querySelectorAll('button, [role="tab"], [role="button"]');
-          for (const tab of tabs) {
-            if ((tab.textContent || '').trim() === '对话') {
-              tab.click();
-              return 'tab';
+          const all = document.querySelectorAll('*');
+          for (const el of all) {
+            if (el.children.length > 0) continue;
+            if ((el.textContent || '').trim() !== '对话') continue;
+            const target = el.closest('button, [role="tab"], [role="button"], a') || el;
+            const view = typeof window !== 'undefined' ? window : null;
+            for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+              try {
+                target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view }));
+              } catch (error) {
+                /* ignore one event type */
+              }
             }
+            return 'tab';
           }
         } catch (error) {
           /* ignore */
@@ -3139,10 +3163,10 @@ window.__ModuleLoader__.load({
             return;
           }
           if (!switched) {
-            setError(
-              '无法切回对话面板：layout.selectPanel 不可用，「对话」标签也没找到。' +
-                '原文已复制到剪贴板，可手动切到对话后粘贴搜索。',
-            );
+            // Both mechanisms failed: keep the panel and show the source text so
+            // the click still produces something you can act on.
+            setSourceCard({ text, reason: 'panel' });
+            setError('无法自动切到对话面板，已在下方显示这条原文（可复制后再切过去搜索）');
             return;
           }
           setNotice('已切到对话。这条消息不在当前渲染范围内，原文已复制，粘贴到搜索框即可定位');
@@ -3667,6 +3691,44 @@ window.__ModuleLoader__.load({
               })
             : null,
         ),
+
+        // Fallback card: shown only when switching panels failed, so the click
+        // still yields the source text instead of nothing.
+        sourceCard
+          ? h(
+              'div',
+              { className: 'ttl-sourcecard' },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                h('strong', { style: { fontSize: 12 } }, '这条节点的原文'),
+                h('span', { style: { flex: 1 } }),
+                h('button', {
+                  className: 'ttl-btn ghost',
+                  onClick: () => setSourceCard(null),
+                }, '✕'),
+              ),
+              h('div', { className: 'ttl-sourcecard-body' }, sourceCard.text),
+              h('div', { className: 'row', style: { display: 'flex', gap: 6 } },
+                h('button', {
+                  className: 'ttl-btn',
+                  onClick: () => {
+                    try {
+                      navigator.clipboard.writeText(sourceCard.text);
+                      setNotice('原文已复制');
+                    } catch (error) {
+                      setNotice('复制失败，请手动选中');
+                    }
+                  },
+                }, '复制原文'),
+                h('button', {
+                  className: 'ttl-btn',
+                  onClick: () => {
+                    const how = showConversation();
+                    setNotice(how ? '已切到对话' : '仍然无法自动切换，请手动点「对话」标签');
+                  },
+                }, '再试一次切换'),
+              ),
+            )
+          : null,
       );
     }
 
@@ -3719,7 +3781,9 @@ window.__ModuleLoader__.load({
               name: 'sidebar.panellist',
               id: 'thinking-treelog',
               order: 20,
-              label: () => '思维树',
+              // The build marker lives here so it is visible without opening the
+              // panel: if the sidebar does not say this, old code is loaded.
+              label: () => `思维树·${BUILD}`,
             },
             PanelIcon,
           ),
