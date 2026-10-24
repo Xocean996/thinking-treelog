@@ -59,6 +59,9 @@ window.__ModuleLoader__.load({
     };
 
     const TREES_KEY = 'ttl.trees.v1';
+    // Bump on every change that must be visible in the UI. If the panel does not
+    // show this marker, the browser is still running an older module.
+    const BUILD = 'r8';
     const BACKUP_KEY = 'ttl.trees.backup.v1';
     const SETTINGS_KEY = 'ttl.settings.v1';
     const APIKEY_SESSION_KEY = 'ttl.llm.key';
@@ -2313,7 +2316,7 @@ window.__ModuleLoader__.load({
     }
 
     function NodeDetail(props) {
-      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview, onAddInnovation } = props;
+      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview, onAddInnovation, onJump } = props;
       const [deep, setDeep] = useState('');
       const [deepBusy, setDeepBusy] = useState(false);
       const meta = TYPE_META[node.type] || TYPE_META.claim;
@@ -2350,6 +2353,16 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+
+        // One-click path that does not depend on double-click at all.
+        node.messageText
+          ? h('button', {
+              className: 'ttl-btn primary',
+              style: { justifyContent: 'center' },
+              onClick: () => onJump && onJump(node),
+              title: '跳到对话里的这条提问',
+            }, '→ 去对话中的这条')
+          : h('div', { className: 'ttl-hint' }, '这是汇总节点，没有对应的单条消息'),
 
         h('label', { className: 'ttl-hint' }, '标题'),
         h('input', {
@@ -3041,13 +3054,31 @@ window.__ModuleLoader__.load({
        */
       const showConversation = () => {
         const layout = props && props.layout;
-        if (!layout || typeof layout.selectPanel !== 'function') return false;
-        try {
-          layout.selectPanel(null);
-          return true;
-        } catch (error) {
-          return false;
+        if (layout && typeof layout.selectPanel === 'function') {
+          try {
+            layout.selectPanel(null);
+            return 'service';
+          } catch (error) {
+            /* fall through to the DOM path */
+          }
         }
+
+        // Belt and braces: if the service is missing or rejects, click the
+        // visible 对话 tab. Two independent paths, because a silent failure here
+        // is indistinguishable from "double-click does nothing".
+        try {
+          const tabs = document.querySelectorAll('button, [role="tab"], [role="button"]');
+          for (const tab of tabs) {
+            if ((tab.textContent || '').trim() === '对话') {
+              tab.click();
+              return 'tab';
+            }
+          }
+        } catch (error) {
+          /* ignore */
+        }
+
+        return '';
       };
 
       const jumpToChat = (node) => {
@@ -3107,11 +3138,14 @@ window.__ModuleLoader__.load({
             setTimeout(() => locate(attempt + 1), 500);
             return;
           }
-          setNotice(
-            switched
-              ? '已切到对话。这条消息不在当前渲染范围内，原文已复制，粘贴到搜索框即可定位'
-              : '原文已复制到剪贴板；无法自动切换面板，请手动点「对话」',
-          );
+          if (!switched) {
+            setError(
+              '无法切回对话面板：layout.selectPanel 不可用，「对话」标签也没找到。' +
+                '原文已复制到剪贴板，可手动切到对话后粘贴搜索。',
+            );
+            return;
+          }
+          setNotice('已切到对话。这条消息不在当前渲染范围内，原文已复制，粘贴到搜索框即可定位');
         };
 
         if (switched) setTimeout(() => locate(0), 320);
@@ -3322,8 +3356,11 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'ttl-bar-row' },
             h('span', { className: 'ttl-title' }, '思维树'),
-            h('span', { className: 'ttl-sub' },
-              current
+            h('span', {
+              className: 'ttl-sub',
+              title: '构建标记：面板显示的不是这个值时，浏览器还在跑旧代码，请刷新页面',
+            },
+              `${BUILD} · ${current
                 ? `${current.title} · ${totalNodes} 节点 · ${
                     current.extractor === 'llm'
                       ? 'AI 提取'
@@ -3333,7 +3370,7 @@ window.__ModuleLoader__.load({
                           ? '项目导入'
                           : '规则提取'
                   }`
-                : '尚未选择'),
+                : '尚未选择'}`),
             h(
               'div',
               { className: 'ttl-nav-inline' },
@@ -3626,6 +3663,7 @@ window.__ModuleLoader__.load({
                 onPublish: publishAnnotation,
                 onDeepReview: deepReview,
                 onAddInnovation: addInnovation,
+                onJump: jumpToChat,
               })
             : null,
         ),
