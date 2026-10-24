@@ -223,12 +223,23 @@ function textResult(text) {
 }
 
 function asNodes(args) {
-  const source = args?.tree ?? args;
-  const raw = Array.isArray(source) ? source : source?.nodes;
-  if (!Array.isArray(raw)) {
-    throw new Error('expected a tree object with a nodes array, or a bare node array');
+  // Be explicit about where nodes come from: `args.tree ?? args` used to swallow
+  // any other argument object and report an unrelated "nodes" error.
+  if (Array.isArray(args)) return normalizeNodes(args);
+
+  if (args && typeof args === 'object') {
+    const tree = args.tree;
+    if (Array.isArray(tree)) return normalizeNodes(tree);
+    if (tree && typeof tree === 'object' && Array.isArray(tree.nodes)) {
+      return normalizeNodes(tree.nodes);
+    }
+    if (Array.isArray(args.nodes)) return normalizeNodes(args.nodes);
   }
-  return normalizeNodes(raw);
+
+  throw new Error(
+    'missing tree: expected a nodes array — pass `tree` as an array of nodes or as ' +
+      '{ nodes: [...] }, or pass `nodes` directly',
+  );
 }
 
 function asTitle(args, nodes) {

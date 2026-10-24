@@ -2502,11 +2502,18 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function Panel(props) {
-      const [trees, setTrees] = useState(() => loadTrees());
-      const [currentId, setCurrentId] = useState(() => {
+      // Load storage once, not twice: loadTrees normalises every tree and this
+      // used to run again for the currentId initialiser.
+      const bootstrap = useRef(null);
+      if (bootstrap.current === null) {
         const loaded = loadTrees();
-        return loaded.length ? loaded[0].id : '';
-      });
+        bootstrap.current = {
+          trees: loaded,
+          currentId: loaded.length ? loaded[0].id : '',
+        };
+      }
+      const [trees, setTrees] = useState(bootstrap.current.trees);
+      const [currentId, setCurrentId] = useState(bootstrap.current.currentId);
       const [settings, setSettings] = useState(() => loadSettings());
 
       const [source, setSource] = useState(SAMPLE_TEXT);
@@ -2523,7 +2530,7 @@ window.__ModuleLoader__.load({
       const [sessionOptions, setSessionOptions] = useState([]);
       const [targetSession, setTargetSession] = useState('');
 
-      useEffect(() => {
+      const refreshSessions = useCallback(() => {
         fetch('http://127.0.0.1:17866/sessions', { cache: 'no-store' })
           .then((response) => (response.ok ? response.json() : null))
           .then((data) => {
@@ -2545,6 +2552,12 @@ window.__ModuleLoader__.load({
             /* Host bridge not up yet */
           });
       }, []);
+
+      // Refresh when the panel is opened and after each analysis, otherwise a
+      // conversation started in this tab never appears in the picker.
+      useEffect(() => {
+        refreshSessions();
+      }, [refreshSessions]);
 
       const layoutRef = useRef(null);
       const canvasApi = useRef(null);
@@ -2580,22 +2593,25 @@ window.__ModuleLoader__.load({
 
       const persist = useCallback((next) => {
         setTrees(next);
-        writeJson(TREES_KEY, next);
+        if (!writeJson(TREES_KEY, next)) {
+          setError('保存失败：浏览器本地存储已满，删掉一些树或缩短内容后再试');
+        }
         window.dispatchEvent(new CustomEvent('ttl:trees'));
       }, []);
 
       const patchCurrent = useCallback(
         (patch) => {
-          setTrees((prev) => {
-            const next = prev.map((t) =>
-              t.id === currentId ? { ...t, ...patch, updatedAt: Date.now() } : t,
-            );
-            writeJson(TREES_KEY, next);
-            window.dispatchEvent(new CustomEvent('ttl:trees'));
-            return next;
-          });
+          const next = trees.map((t) =>
+            t.id === currentId ? { ...t, ...patch, updatedAt: Date.now() } : t,
+          );
+          setTrees(next);
+          // Side effects belong outside the updater: React may call it twice.
+          if (!writeJson(TREES_KEY, next)) {
+            setError('保存失败：浏览器本地存储已满，删掉一些树或缩短内容后再试');
+          }
+          window.dispatchEvent(new CustomEvent('ttl:trees'));
         },
-        [currentId],
+        [currentId, trees],
       );
 
       const folderRef = useRef(null);
@@ -2679,6 +2695,7 @@ window.__ModuleLoader__.load({
           setNotice(
             `${data.analysis.turns} 轮对话 · ${data.analysis.toolCalls} 次工具调用 · ${data.suggestions.length} 条建议`,
           );
+          refreshSessions();
         } catch (err) {
           setError(
             `连不上本地分析服务（${(err && err.message) || err}）。这个能力由插件的 Host 半边提供，需要重启 dsh 后生效；在此之前可以先用「导入项目」或粘贴。`,
@@ -2836,6 +2853,12 @@ window.__ModuleLoader__.load({
         const response = await fetch('http://127.0.0.1:17866/deep-review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: (() => {
+            if (typeof AbortController !== 'function') return undefined;
+            const controller = new AbortController();
+            setTimeout(() => controller.abort(), 20000);
+            return controller.signal;
+          })(),
           body: JSON.stringify({
             text: target.text,
             baseUrl: llm.baseUrl,
@@ -3007,6 +3030,12 @@ window.__ModuleLoader__.load({
           text: `${origin.text}\n\n[分支假设] 如果换一个前提，这里的推理会怎么变？`,
           createdAt: now,
         };
+        // A branch is a hypothetical, not a restatement: it must not claim to be
+        // the same message, nor inherit "this is an auto-generated innovation".
+        delete clone.virtual;
+        delete clone.seq;
+        delete clone.messageText;
+        delete clone.review;
         patchCurrent({ nodes: [...nodes, clone] });
         setSelectedId(clone.id);
         setCutoff(nodes.length + 1);
@@ -3034,6 +3063,8 @@ window.__ModuleLoader__.load({
 
       const exportJson = () => {
         if (!current) return;
+        // Export every field the panel can restore, not a hand-picked few: a
+        // backup that drops annotations and reviews is not a backup.
         download(
           `${current.title.replace(/[\\/:*?"<>|]/g, '_')}.json`,
           JSON.stringify(
@@ -3042,10 +3073,7 @@ window.__ModuleLoader__.load({
               source: current.source,
               extractor: current.extractor,
               createdAt: current.createdAt,
-              nodes: current.nodes.map((n) => ({
-                id: n.id, parentId: n.parentId, label: n.label, text: n.text,
-                type: n.type, confidence: n.confidence, branchId: n.branchId, tags: n.tags,
-              })),
+              nodes: current.nodes,
             },
             null,
             2,
@@ -3169,6 +3197,11 @@ window.__ModuleLoader__.load({
                 h('option', { key: session.id, value: session.id }, session.label),
               ),
             ),
+            h('button', {
+              className: 'ttl-btn ghost',
+              title: '重新读取会话列表',
+              onClick: refreshSessions,
+            }, '⟳'),
             h('input', {
               className: 'ttl-input',
               placeholder: '搜索节点…',

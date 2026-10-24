@@ -265,7 +265,7 @@ export function scoreQuestion(text) {
   if (/\d+/.test(value)) score += 10;
   if (/优先|取舍|权衡|tradeoff/i.test(value)) score += 8;
   if (/因为|所以|由于|因此/.test(value)) score += 8;
-  if (/(完成|验收|跑通|通过|输出|能用)/.test(value)) score += 14;
+  if (/(完成|验收|跑通|通过|输出|能用|acceptance|accept|done when|verify|passes|should return|works when)/i.test(value)) score += 14;
   if (value.length >= 40) score += 8;
   if (/同时|以及|还有|顺便/.test(value)) score -= 12;
   if (!/(现在|目前|已经|现状|之前)/.test(value)) score -= 6;
@@ -307,7 +307,7 @@ export function reviewQuestion(text) {
   if (!pros.length) pros.push('意图清楚，方向可辨');
 
   if (value.length < 20) cons.push('信息量偏少，缺上下文');
-  if (!/(完成|验收|跑通|通过|输出|能用)/.test(value)) cons.push('没有验收标准，"做完"无法判断');
+  if (!/(完成|验收|跑通|通过|输出|能用|acceptance|accept|done when|verify|passes|should return|works when)/i.test(value)) cons.push('没有验收标准，"做完"无法判断');
   if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标，容易只做一半');
   if (!/(现在|目前|已经|现状|之前)/.test(value)) cons.push('没交代现状，看不出差距');
   if (stage === 'design' && !/(方案|选项|备选|对比)/.test(value)) cons.push('只要一个答案，没留备选');

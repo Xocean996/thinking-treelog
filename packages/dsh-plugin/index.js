@@ -445,7 +445,7 @@ export function reviewOf(text, stage) {
   if (/\d+/.test(value)) score += 10;
   if (/优先|取舍|权衡|tradeoff/i.test(value)) score += 8;
   if (/因为|所以|由于|因此/.test(value)) score += 8;
-  if (/(完成|验收|跑通|通过|输出|能用)/.test(value)) score += 14;
+  if (/(完成|验收|跑通|通过|输出|能用|acceptance|accept|done when|verify|passes|should return|works when)/i.test(value)) score += 14;
   if (value.length >= 40) score += 8;
   if (/同时|以及|还有|顺便/.test(value)) score -= 12;
   if (!/(现在|目前|已经|现状|之前)/.test(value)) score -= 6;
@@ -580,12 +580,28 @@ function send(res, status, body) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
+    let settled = false;
     req.on('data', (chunk) => {
+      if (settled) return;
       data += chunk;
-      if (data.length > 2_000_000) req.destroy();
+      if (data.length > 2_000_000) {
+        // Reject before destroying: `end` never fires after destroy(), which used
+        // to leave this promise pending forever.
+        settled = true;
+        reject(new Error('request body too large'));
+        req.destroy();
+      }
     });
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(data);
+    });
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
 
