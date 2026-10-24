@@ -1442,6 +1442,8 @@ window.__ModuleLoader__.load({
       .ttl-dock-sep { opacity: .35; }
       .ttl-dock-count { font-variant-numeric: tabular-nums; }
       .ttl-dock-warn { color: #e8590c; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .ttl-dock-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+      .ttl-dock-idle { color: #e8590c; font-variant-numeric: tabular-nums; }
       .ttl-dock-open { color: #2f6feb; font-weight: 700; }
       .ttl-review {
         display: flex; flex-direction: column; gap: 5px;
@@ -1458,6 +1460,14 @@ window.__ModuleLoader__.load({
       .ttl-review-row.pros .ttl-review-tag { color: #37b24d; }
       .ttl-review-row.cons .ttl-review-tag { color: #e8590c; }
       .ttl-review-row.next .ttl-review-tag { color: #2f6feb; }
+      .ttl-rewrite { font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+      .ttl-score { margin-left: auto; font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .ttl-deep {
+        padding: 9px 11px; border-radius: 11px; font-size: 11px; line-height: 1.6;
+        white-space: pre-wrap;
+        background: color-mix(in srgb, #2f6feb 10%, transparent);
+        border: 1px solid color-mix(in srgb, #2f6feb 30%, transparent);
+      }
       .ttl-nav {
         position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px;
         padding: 6px; border-radius: 12px; z-index: 3;
@@ -1612,6 +1622,26 @@ window.__ModuleLoader__.load({
           h('span', { className: 'ttl-dock-brand' }, '思维树'),
           h('span', { className: 'ttl-dock-sep' }, '·'),
           h('span', { className: 'ttl-dock-count' }, `${latest.nodes.length}`),
+          latest.averageScore
+            ? h('span', {
+                className: 'ttl-dock-score',
+                style: {
+                  color:
+                    latest.averageScore >= 70 ? '#37b24d' : latest.averageScore >= 45 ? '#e8590c' : '#e03131',
+                },
+                title: '这次工作里提问的平均结构分',
+              }, `${latest.averageScore}`)
+            : null,
+          (() => {
+            const idleHours = latest.lastAt
+              ? Math.floor((Date.now() - latest.lastAt) / 3600000)
+              : null;
+            if (idleHours === null || idleHours < 4) return null;
+            return h('span', {
+              className: 'ttl-dock-idle',
+              title: '距上次推进已经过去这么久',
+            }, `${idleHours}h`);
+          })(),
           issues ? h('span', { className: 'ttl-dock-warn' }, `${issues} 问题`) : null,
           h('span', { className: 'ttl-dock-open' }, '→'),
         ),
@@ -2103,7 +2133,9 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function NodeDetail(props) {
-      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish } = props;
+      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview } = props;
+      const [deep, setDeep] = useState('');
+      const [deepBusy, setDeepBusy] = useState(false);
       const meta = TYPE_META[node.type] || TYPE_META.claim;
       const path = pathTo(graph, node.id);
 
@@ -2114,6 +2146,15 @@ window.__ModuleLoader__.load({
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { className: 'ttl-badge', style: { background: meta.color } }, meta.label),
+          node.review && typeof node.review.score === 'number'
+            ? h('span', {
+                className: 'ttl-score',
+                style: {
+                  color: node.review.score >= 70 ? '#37b24d' : node.review.score >= 45 ? '#e8590c' : '#e03131',
+                },
+                title: '这句提问的结构分：有没有数字、验收、理由、是否收敛',
+              }, `${node.review.score}`)
+            : null,
           h('span', { className: 'ttl-hint' }, `置信度 ${Math.round(node.confidence * 100)}%`),
           h('span', { className: 'ttl-spacer', style: { flex: 1 } }),
           h('button', { className: 'ttl-btn ghost', onClick: onClose, title: '关闭' }, '✕'),
@@ -2210,6 +2251,15 @@ window.__ModuleLoader__.load({
             )
           : null,
 
+        node.review && node.review.rewrite
+          ? h(
+              'div',
+              { className: 'ttl-review' },
+              h('div', { className: 'ttl-review-head' }, '改写建议'),
+              h('div', { className: 'ttl-rewrite' }, node.review.rewrite),
+            )
+          : null,
+
         h('label', { className: 'ttl-hint' }, '我的批注'),
         h('textarea', {
           className: 'ttl-textarea',
@@ -2225,7 +2275,39 @@ window.__ModuleLoader__.load({
             onClick: () => onPublish && onPublish(node.id),
             title: '把批注复制到剪贴板，粘到输入框发送即可在当前工作区执行',
           }, '发布批注'),
+          node.skill
+            ? h('button', {
+                className: 'ttl-btn',
+                onClick: () => {
+                  try {
+                    navigator.clipboard.writeText(`Use ${node.skill}`);
+                  } catch (err) {
+                    /* ignore */
+                  }
+                },
+                title: `复制「Use ${node.skill}」`,
+              }, '复制技能')
+            : null,
         ),
+
+        h('div', { className: 'row' },
+          h('button', {
+            className: 'ttl-btn',
+            disabled: deepBusy,
+            onClick: async () => {
+              setDeepBusy(true);
+              try {
+                setDeep(await onDeepReview(node.id));
+              } catch (err) {
+                setDeep(`失败：${(err && err.message) || err}`);
+              } finally {
+                setDeepBusy(false);
+              }
+            },
+            title: '用你在设置里配置的模型做一次内容评审',
+          }, deepBusy ? 'AI 评审中…' : 'AI 深评'),
+        ),
+        deep ? h('div', { className: 'ttl-deep' }, deep) : null,
 
         h('div', { className: 'row' },
           h('button', {
@@ -2467,6 +2549,9 @@ window.__ModuleLoader__.load({
             createdAt: now,
             updatedAt: now,
             extractor: 'workspace',
+            averageScore: data.averageScore || 0,
+            hourHistogram: data.hourHistogram || [],
+            lastAt: data.analysis.lastAt || null,
           };
 
           persist([tree, ...trees].slice(0, 40));
@@ -2621,6 +2706,28 @@ window.__ModuleLoader__.load({
           clearTimeout(timeout);
           setBusy(false);
         }
+      };
+
+      const deepReview = async (id) => {
+        const target = nodes.find((n) => n.id === id);
+        if (!target) return '';
+        const llm = (settings && settings.llm) || {};
+        if (!llm.apiKey) {
+          return '先在「设置」里填 API Key。Host 会用你的端点调用，密钥不经过第三方。';
+        }
+        const response = await fetch('http://127.0.0.1:17866/deep-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: target.text,
+            baseUrl: llm.baseUrl,
+            apiKey: llm.apiKey,
+            model: llm.model,
+          }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!data || !data.ok) throw new Error((data && data.error) || 'AI 评审失败');
+        return data.review;
       };
 
       const jumpToChat = (node) => {
@@ -3113,6 +3220,7 @@ window.__ModuleLoader__.load({
                 onDelete: deleteNode,
                 onClose: () => setSelectedId(''),
                 onPublish: publishAnnotation,
+                onDeepReview: deepReview,
               })
             : null,
         ),

@@ -358,7 +358,35 @@ function reviewOf(text, stage) {
   next.push(...(nextByStage[stage] || nextByStage.design));
   if (cons.some((item) => item.includes('验收'))) next.push('补一行验收标准');
 
-  return { pros: pros.slice(0, 3), cons: cons.slice(0, 3), next: next.slice(0, 3) };
+  // A rough structural score: does this ask contain what a good ask needs?
+  let score = 50;
+  if (/\d+/.test(value)) score += 10;
+  if (/优先|取舍|权衡|tradeoff/i.test(value)) score += 8;
+  if (/因为|所以|由于|因此/.test(value)) score += 8;
+  if (/(完成|验收|跑通|通过|输出|能用)/.test(value)) score += 14;
+  if (value.length >= 40) score += 8;
+  if (/同时|以及|还有|顺便/.test(value)) score -= 12;
+  if (!/(现在|目前|已经|现状|之前)/.test(value)) score -= 6;
+  score = Math.max(10, Math.min(98, score));
+
+  const acceptance = {
+    design: '完成时能拿出 2 个备选，并说明各自的代价',
+    plan: '完成时有一份可执行的任务清单，每步带验收',
+    build: '完成时测试通过，且能跑通一个真实场景',
+    debug: '完成时能复现→定位→修复，并留下一条回归测试',
+    verify: '完成时每条预期输出都能对上',
+    review: '完成时有一个没参与的人给出具体意见',
+  }[stage] || '完成时能跑通一个具体场景';
+
+  const rewrite = `「${short(value, 34)}」\n验收：${acceptance}。\n约束：只改一处，其余保持不动。`;
+
+  return {
+    pros: pros.slice(0, 3),
+    cons: cons.slice(0, 3),
+    next: next.slice(0, 3),
+    score,
+    rewrite,
+  };
 }
 
 function pulseToTree(analysis, suggestions) {
@@ -467,11 +495,71 @@ function send(res, status, body) {
   res.end(payload);
 }
 
-function handle(req, res) {
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+      if (data.length > 2_000_000) req.destroy();
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
+async function handle(req, res) {
   const url = new URL(req.url || '/', `http://127.0.0.1:${PORT}`);
 
   if (url.pathname === '/health') {
     return send(res, 200, { ok: true, version: VERSION });
+  }
+
+  if (url.pathname === '/deep-review') {
+    if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'POST only' });
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const text = String(body.text || '').slice(0, 4000);
+      const baseUrl = String(body.baseUrl || '').replace(/\/+$/, '');
+      const apiKey = String(body.apiKey || '');
+      const model = String(body.model || '');
+      if (!text) return send(res, 400, { ok: false, error: 'text required' });
+      if (!baseUrl || !apiKey || !model) {
+        return send(res, 400, { ok: false, error: 'baseUrl / apiKey / model required' });
+      }
+
+      const llm = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          max_tokens: 700,
+          messages: [
+            {
+              role: 'system',
+              content:
+                '你是严格的工程评审。输出三段，每段两行，不要客套、不要总结：\n' +
+                '优点：\n- ...\n- ...\n不足：\n- ...\n- ...\n下一步：\n- ...\n- ...',
+            },
+            { role: 'user', content: text },
+          ],
+        }),
+      });
+
+      if (!llm.ok) {
+        const detail = await llm.text().catch(() => '');
+        return send(res, 502, { ok: false, error: `LLM ${llm.status}: ${detail.slice(0, 200)}` });
+      }
+
+      const payload = await llm.json();
+      const content =
+        (payload.choices && payload.choices[0] && payload.choices[0].message
+          ? payload.choices[0].message.content
+          : '') || '';
+      return send(res, 200, { ok: true, review: content });
+    } catch (error) {
+      return send(res, 500, { ok: false, error: String(error && error.message) });
+    }
   }
 
   if (url.pathname === '/sessions') {
@@ -522,6 +610,17 @@ function handle(req, res) {
     const suggestions = suggestNext(analysis);
     const tree = pulseToTree(analysis, suggestions);
 
+    const hours = new Array(24).fill(0);
+    for (const message of analysis.userMessages) {
+      if (message.time) hours[new Date(message.time).getHours()] += 1;
+    }
+    const scores = tree
+      .filter((node) => node.review && typeof node.review.score === 'number')
+      .map((node) => node.review.score);
+    const averageScore = scores.length
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+
     return send(res, 200, {
       ok: true,
       workspace: picked.workspace,
@@ -536,6 +635,8 @@ function handle(req, res) {
         todos: analysis.todos,
         lastAt: analysis.lastAt,
       },
+      hourHistogram: hours,
+      averageScore,
       suggestions,
       tree,
     });
@@ -557,7 +658,13 @@ export function apply(ctx) {
         res.end();
         return;
       }
-      handle(req, res);
+      handle(req, res).catch((error) => {
+        try {
+          send(res, 500, { ok: false, error: String(error && error.message) });
+        } catch {
+          /* response already sent */
+        }
+      });
     });
     server.on('error', () => {
       /* port taken: the panel degrades to its offline modes */
