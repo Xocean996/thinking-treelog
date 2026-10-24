@@ -17,11 +17,11 @@ window.__ModuleLoader__.load({
      * Constants
      * ------------------------------------------------------------------ */
 
-    const NODE_W = 208;
-    const NODE_H = 58;
-    const COL_W = 272;
-    const ROW_H = 86;
-    const PAD = 44;
+    const NODE_W = 236;
+    const NODE_H = 68;
+    const COL_W = 304;
+    const ROW_H = 96;
+    const PAD = 48;
 
     const DEFAULT_BRANCH = 'main';
 
@@ -1567,7 +1567,7 @@ window.__ModuleLoader__.load({
     function TreeCanvas(props) {
       const {
         nodes, selectedId, onSelect, query, typeFilter, cutoff,
-        onAddChild, layoutRef, findings, apiRef, focusMode,
+        onAddChild, layoutRef, findings, apiRef, focusMode, onJumpToChat,
       } = props;
 
       const svgRef = useRef(null);
@@ -1581,6 +1581,10 @@ window.__ModuleLoader__.load({
       const fittedRef = useRef('');
 
       const layout = useMemo(() => computeLayout(nodes), [nodes]);
+      const maxDepth = useMemo(
+        () => layout.nodes.reduce((deepest, entry) => Math.max(deepest, entry.depth), 0),
+        [layout],
+      );
 
       useEffect(() => {
         if (layoutRef) layoutRef.current = layout;
@@ -1820,6 +1824,24 @@ window.__ModuleLoader__.load({
               h('feDropShadow', { dx: '0', dy: '0', stdDeviation: '5', floodColor: '#2f6feb', floodOpacity: '0.9' }),
             ),
           ),
+          // Depth lanes: a faint band per level so the tree reads as layers, not spaghetti.
+          h(
+            'g',
+            { className: 'ttl-swim' },
+            Array.from({ length: maxDepth + 1 }, (_, depth) =>
+              depth % 2 === 0
+                ? h('rect', {
+                    key: `swim-${depth}`,
+                    x: PAD + depth * COL_W - 30,
+                    y: 0,
+                    width: COL_W,
+                    height: layout.height + 200,
+                    rx: 22,
+                    fill: 'rgba(122, 162, 255, 0.03)',
+                  })
+                : null,
+            ),
+          ),
           // Links first so nodes paint on top.
           h(
             'g',
@@ -1853,6 +1875,7 @@ window.__ModuleLoader__.load({
               const accepted = node.status === 'accepted';
               const muted = !visible || rejected;
               const dimmed = focusedIds && !focusedIds.has(node.id);
+              const isRoot = node.parentId === null;
 
               return h(
                 'g',
@@ -1871,6 +1894,10 @@ window.__ModuleLoader__.load({
                   },
                   onDoubleClick: (event) => {
                     event.stopPropagation();
+                    if (node.seq && onJumpToChat) {
+                      onJumpToChat(node);
+                      return;
+                    }
                     if (onAddChild) onAddChild(node.id);
                   },
                   onMouseEnter: () => {
@@ -1881,49 +1908,51 @@ window.__ModuleLoader__.load({
                 },
                 // Card surface, then a colour wash, then the border.
                 h('rect', {
-                  width: NODE_W, height: NODE_H, rx: 12,
+                  width: NODE_W, height: NODE_H, rx: 15,
                   fill: 'var(--dsw-alias-bg-layer-1, #16181d)',
                   filter: selected ? 'url(#ttl-glow)' : 'url(#ttl-shadow)',
                 }),
                 h('rect', {
-                  width: NODE_W, height: NODE_H, rx: 12,
-                  fill: withAlpha(meta.color, muted ? 0.05 : 0.17),
+                  width: NODE_W, height: NODE_H, rx: 15,
+                  fill: withAlpha(meta.color, muted ? 0.05 : isRoot ? 0.26 : 0.17),
                 }),
                 h('rect', {
-                  width: NODE_W, height: NODE_H, rx: 12, fill: 'none',
-                  stroke: rejected ? '#e03131' : withAlpha(meta.color, selected ? 1 : muted ? 0.2 : 0.45),
-                  strokeWidth: selected ? 2 : 1.1,
+                  width: NODE_W, height: NODE_H, rx: 15, fill: 'none',
+                  stroke: rejected
+                    ? '#e03131'
+                    : withAlpha(meta.color, selected ? 1 : muted ? 0.2 : isRoot ? 0.7 : 0.45),
+                  strokeWidth: selected ? 2 : isRoot ? 1.6 : 1.1,
                   strokeDasharray: rejected ? '5 4' : undefined,
                 }),
                 // Type spine.
                 h('rect', {
-                  x: 0, y: 11, width: 3.5, height: NODE_H - 22, rx: 2,
+                  x: 0, y: 13, width: 3.5, height: NODE_H - 26, rx: 2,
                   fill: meta.color, opacity: muted ? 0.45 : 1,
                 }),
                 h('text', {
-                  x: 14, y: 26,
+                  x: 16, y: 30,
                   fill: 'var(--dsw-alias-label-primary, #eceff4)',
-                  fontSize: 12.5, fontWeight: 600,
+                  fontSize: isRoot ? 13.5 : 12.8, fontWeight: 600,
                   style: { pointerEvents: 'none' },
-                }, truncate(node.label, 13)),
+                }, truncate(node.label, 14)),
                 h('text', {
-                  x: 14, y: 44,
+                  x: 16, y: 51,
                   fill: withAlpha(meta.color, muted ? 0.65 : 0.95),
                   fontSize: 10, fontWeight: 600,
                   style: { pointerEvents: 'none' },
                 }, meta.label),
                 h('text', {
-                  x: 14 + meta.label.length * 10.5 + 7, y: 44,
+                  x: 16 + meta.label.length * 10.5 + 8, y: 51,
                   fill: 'var(--dsw-alias-label-secondary, #8b93a1)',
                   fontSize: 9.5,
                   style: { pointerEvents: 'none' },
                 }, `${Math.round(node.confidence * 100)}%`),
                 accepted
-                  ? h('circle', { cx: NODE_W - 11, cy: 11, r: 3.2, fill: '#0ca678' })
+                  ? h('circle', { cx: NODE_W - 12, cy: 12, r: 3.2, fill: '#0ca678' })
                   : null,
                 node.branchId && node.branchId !== DEFAULT_BRANCH
                   ? h('circle', {
-                      cx: NODE_W - 11, cy: 11, r: 3.2,
+                      cx: NODE_W - 12, cy: 12, r: 3.2,
                       fill: BRANCH_PALETTE[Math.abs(hashCode(node.branchId)) % BRANCH_PALETTE.length],
                     })
                   : null,
@@ -2171,7 +2200,7 @@ window.__ModuleLoader__.load({
      * Main panel
      * ------------------------------------------------------------------ */
 
-    function Panel() {
+    function Panel(props) {
       const [trees, setTrees] = useState(() => loadTrees());
       const [currentId, setCurrentId] = useState(() => {
         const loaded = loadTrees();
@@ -2465,8 +2494,26 @@ window.__ModuleLoader__.load({
         }
       };
 
-      const publishAnnotation = async (id) => {
-        const target = nodes.find((n) => n.id === id);
+      const jumpToChat = (node) => {
+        const text = node.messageText || node.text || '';
+        if (text) {
+          try {
+            navigator.clipboard.writeText(text);
+          } catch (err) {
+            /* ignore */
+          }
+        }
+        setNotice('已复制这条内容；切到对话后粘贴即可定位到对应段落');
+        try {
+          if (props && props.layout && typeof props.layout.selectPanel === 'function') {
+            props.layout.selectPanel('conversation');
+          }
+        } catch (err) {
+          /* ignore */
+        }
+      };
+
+      const publishAnnotation = async (id) => {        const target = nodes.find((n) => n.id === id);
         if (!target || !target.annotation) {
           setNotice('先写一条批注');
           return;
@@ -2854,6 +2901,7 @@ window.__ModuleLoader__.load({
             findings,
             apiRef: canvasApi,
             focusMode,
+            onJumpToChat: jumpToChat,
           }),
 
           // Detail
@@ -2931,7 +2979,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('main', () =>
           ctx.slots.register(
             { name: 'main', key: 'thinking-treelog' },
-            Panel,
+            () => h(Panel, { layout: ctx.layout }),
           ),
         );
 

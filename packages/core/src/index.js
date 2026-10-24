@@ -29,11 +29,11 @@
  * @property {number} [createdAt]
  */
 
-export const NODE_W = 208;
-export const NODE_H = 58;
-export const COL_W = 272;
-export const ROW_H = 86;
-export const PAD = 44;
+export const NODE_W = 236;
+export const NODE_H = 68;
+export const COL_W = 304;
+export const ROW_H = 96;
+export const PAD = 48;
 
 export const DEFAULT_BRANCH = 'main';
 

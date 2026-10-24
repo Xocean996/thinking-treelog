@@ -32,7 +32,7 @@ export function sessionsRoot(home = homedir()) {
  * @returns {any[]}
  */
 export function decodeSession(file, options = {}) {
-  const maxFrames = options.maxFrames ?? 400;
+  const maxFrames = options.maxFrames ?? 1500;
   const headFrames = options.headFrames ?? 0;
   const fromTail = options.fromTail !== false;
 

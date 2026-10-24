@@ -17,7 +17,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const VERSION = '0.4.0';
-const PORT = 17866;
+const PORT = Number(process.env.TTL_PORT) || 17866;
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;
 const NOISE_RE =
@@ -32,7 +32,7 @@ function sessionsRoot() {
   return join(homedir(), '.dsh', 'sessions');
 }
 
-function decodeSession(file, maxFrames = 400, headFrames = 6) {
+function decodeSession(file, maxFrames = 1500, headFrames = 6) {
   const buf = readFileSync(file);
   const offsets = [];
   let at = buf.indexOf(MAGIC);
@@ -167,7 +167,9 @@ function analyze(records) {
         break;
       case 'user/message': {
         const text = textOf(rec.data && rec.data.content);
-        if (text && !NOISE_RE.test(text)) messages.push({ role: 'user', text, time: rec.time || 0 });
+        if (text && !NOISE_RE.test(text)) {
+          messages.push({ role: 'user', text, time: rec.time || 0, seq: rec.seq });
+        }
         break;
       }
       case 'assistant/message': {
@@ -260,12 +262,61 @@ function suggestNext(analysis, now = Date.now()) {
   return out;
 }
 
+/**
+ * Classify what stage of work a question belongs to, and name the superpowers
+ * skill that owns that stage. This is what makes a node self-check rather than
+ * just display.
+ */
+function stageOf(text) {
+  const value = String(text || '');
+  if (/报错|错误|bug|失败|调试|排查|不工作|fix|error|debug|broken/i.test(value)) {
+    return {
+      stage: 'debug',
+      skill: 'systematic-debugging',
+      why: '这段在排查问题：先写假设再验证，别直接改。',
+    };
+  }
+  if (/测试|验证|确认|验收|test|verify|coverage/i.test(value)) {
+    return {
+      stage: 'verify',
+      skill: 'verification-before-completion',
+      why: '这段需要证据：先跑命令再下结论。',
+    };
+  }
+  if (/审查|评审|review|看看有没有问题/i.test(value)) {
+    return {
+      stage: 'review',
+      skill: 'requesting-code-review',
+      why: '这段适合交给一个没参与的人审。',
+    };
+  }
+  if (/计划|步骤|拆解|任务|路线|plan|roadmap/i.test(value)) {
+    return {
+      stage: 'plan',
+      skill: 'writing-plans',
+      why: '这段在拆工作：写成可验收的任务再动手。',
+    };
+  }
+  if (/实现|写|改|重构|加一个|build|implement|refactor/i.test(value)) {
+    return {
+      stage: 'build',
+      skill: 'executing-plans',
+      why: '这段在落地：按任务逐条推进，别顺手开新线。',
+    };
+  }
+  return {
+    stage: 'design',
+    skill: 'brainstorming',
+    why: '这段在找方向：先把问题问清楚，再决定做什么。',
+  };
+}
+
 function pulseToTree(analysis, suggestions) {
   const nodes = [];
   const now = Date.now();
   let seq = 0;
 
-  const push = (parentId, label, text, type, note) => {
+  const push = (parentId, label, text, type, note, extra) => {
     seq += 1;
     const node = {
       id: `wp${seq}`,
@@ -278,6 +329,7 @@ function pulseToTree(analysis, suggestions) {
       createdAt: now + seq,
       tags: [],
       note: note || '',
+      ...(extra || {}),
     };
     nodes.push(node);
     return node;
@@ -299,12 +351,14 @@ function pulseToTree(analysis, suggestions) {
     '按时间顺序读：每一问都是这条线的一个节点。',
   );
   analysis.userMessages.slice(-8).forEach((message, index) => {
+    const stage = stageOf(message.text);
     push(
       threadNode.id,
       `${index + 1}. ${short(message.text, 20)}`,
       message.text,
       'action',
-      `第 ${index + 1} 步：${short(message.text, 60)}`,
+      `阶段：${stage.stage} · 推荐技能：${stage.skill}\n${stage.why}`,
+      { seq: message.seq, messageText: message.text, skill: stage.skill },
     );
   });
 
