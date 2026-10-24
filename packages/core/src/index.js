@@ -32,7 +32,7 @@
 export const NODE_W = 236;
 export const NODE_H = 68;
 export const COL_W = 304;
-export const ROW_H = 96;
+export const ROW_H = 80;
 export const PAD = 48;
 
 export const DEFAULT_BRANCH = 'main';

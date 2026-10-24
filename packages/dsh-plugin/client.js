@@ -20,7 +20,7 @@ window.__ModuleLoader__.load({
     const NODE_W = 236;
     const NODE_H = 68;
     const COL_W = 304;
-    const ROW_H = 96;
+    const ROW_H = 80;
     const PAD = 48;
 
     const DEFAULT_BRANCH = 'main';
@@ -59,6 +59,7 @@ window.__ModuleLoader__.load({
     };
 
     const TREES_KEY = 'ttl.trees.v1';
+    const BACKUP_KEY = 'ttl.trees.backup.v1';
     const SETTINGS_KEY = 'ttl.settings.v1';
     const APIKEY_SESSION_KEY = 'ttl.llm.key';
 
@@ -1167,6 +1168,11 @@ window.__ModuleLoader__.load({
     function writeJson(key, value) {
       try {
         localStorage.setItem(key, JSON.stringify(value));
+        // Keep a rolling copy of the last good tree list, so a bad write or a
+        // cleared key does not mean the trees are gone for good.
+        if (key === TREES_KEY && Array.isArray(value) && value.length) {
+          localStorage.setItem(BACKUP_KEY, JSON.stringify(value));
+        }
         return true;
       } catch (e) {
         return false;
@@ -1175,8 +1181,9 @@ window.__ModuleLoader__.load({
 
     function loadTrees() {
       const parsed = readJson(TREES_KEY);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
+      const list = Array.isArray(parsed) ? parsed : readJson(BACKUP_KEY);
+      if (!Array.isArray(list)) return [];
+      return list
         .filter((t) => t && typeof t.id === 'string' && Array.isArray(t.nodes))
         .map((t) => ({ ...t, nodes: normalizeNodes(t.nodes) }));
     }
@@ -1321,6 +1328,7 @@ window.__ModuleLoader__.load({
       .ttl-side {
         width: 316px; flex: 0 1 316px; min-width: 240px;
         display: flex; flex-direction: column; min-height: 0;
+        overflow: hidden;
         border-right: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
         background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 46%, transparent);
         backdrop-filter: blur(20px) saturate(1.3);
@@ -1773,7 +1781,9 @@ window.__ModuleLoader__.load({
         const box = el.getBoundingClientRect();
         const availW = Math.max(200, Math.min(box.width || 800, visibleWidth()));
         const availH = Math.max(200, box.height || 600);
-        const scale = Math.min(availW / Math.max(1, layout.width), availH / Math.max(1, layout.height), 1.1);
+        // Fit to width only: height-bound fitting shrank a 24-node tree to 0.4
+        // and made every label unreadable. Vertical overflow is panned instead.
+        const scale = Math.min(availW / Math.max(1, layout.width), 1.1);
         const w = availW / scale;
         const h = availH / scale;
         setView({
@@ -1886,7 +1896,9 @@ window.__ModuleLoader__.load({
         const viewport = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1200;
         const availW = Math.max(200, Math.min(box.width || 800, Math.max(320, viewport - 620)));
         const availH = Math.max(200, box.height || 600);
-        const scale = Math.min(availW / Math.max(1, layout.width), availH / Math.max(1, layout.height), 1.1);
+        // Fit to width only: height-bound fitting shrank a 24-node tree to 0.4
+        // and made every label unreadable. Vertical overflow is panned instead.
+        const scale = Math.min(availW / Math.max(1, layout.width), 1.1);
         const w = availW / scale;
         const h = availH / scale;
         animateTo({ x: layout.width / 2 - w / 2, y: layout.height / 2 - h / 2, w, h });
@@ -2637,12 +2649,18 @@ window.__ModuleLoader__.load({
       }, [trees, currentId]);
 
       const persist = useCallback((next) => {
+        // Never let an empty write erase what is stored: that is how a working
+        // tree list turns into "已保存的思维树 (0)" and never comes back.
+        if (!Array.isArray(next) || (next.length === 0 && trees.length > 0)) {
+          setError('拒绝写入空列表：这会清掉已保存的树。请用每棵树上的 ✕ 删除。');
+          return;
+        }
         setTrees(next);
         if (!writeJson(TREES_KEY, next)) {
           setError('保存失败：浏览器本地存储已满，删掉一些树或缩短内容后再试');
         }
         window.dispatchEvent(new CustomEvent('ttl:trees'));
-      }, []);
+      }, [trees]);
 
       const patchCurrent = useCallback(
         (patch) => {
@@ -3326,7 +3344,8 @@ window.__ModuleLoader__.load({
                   h('h4', null, '从文本生成'),
                   h('textarea', {
                     className: 'ttl-textarea',
-                    rows: 8,
+                    rows: 5,
+                    style: { maxHeight: 132 },
                     value: source,
                     placeholder: '粘贴对话、方案讨论，或直接拖入 .md 计划文件…',
                     onChange: (e) => setSource(e.target.value),
