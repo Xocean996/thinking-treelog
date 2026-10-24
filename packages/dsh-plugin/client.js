@@ -1360,10 +1360,10 @@ window.__ModuleLoader__.load({
       .ttl-tree-item .meta { font-size: 10px; color: var(--dsw-alias-label-secondary, #888); }
       .ttl-canvas {
         flex: 1; position: relative; min-width: 0; overflow: hidden;
-        /* Measured on this host: the slot starts around x=755 and the window is
-           1295 wide, so a 662px canvas ran 122px past the right edge. Keep the
-           canvas inside the window; the sidebar sets the remaining room. */
-        max-width: calc(100vw - 760px);
+        /* Width comes from the root, which is clamped against visualViewport in
+           JS. A CSS viewport unit cannot do it: 100vw is the layout viewport and
+           the host's page zoom makes it far larger than the visible area. */
+        max-width: 100%;
         background-color: transparent;
         background-image: radial-gradient(
           circle,
@@ -1758,6 +1758,25 @@ window.__ModuleLoader__.load({
         [layout],
       );
 
+      // Real content extent. layout.width/height include padding on both sides,
+      // so centring on them left a visible empty band on the left.
+      const bounds = useMemo(() => {
+        if (!layout.nodes.length) {
+          return { minX: 0, maxX: Math.max(1, layout.width), minY: 0, maxY: Math.max(1, layout.height) };
+        }
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const entry of layout.nodes) {
+          minX = Math.min(minX, entry.x);
+          maxX = Math.max(maxX, entry.x + NODE_W);
+          minY = Math.min(minY, entry.y);
+          maxY = Math.max(maxY, entry.y + NODE_H);
+        }
+        return { minX, maxX, minY, maxY };
+      }, [layout]);
+
       useEffect(() => {
         if (layoutRef) layoutRef.current = layout;
       }, [layout, layoutRef]);
@@ -1766,33 +1785,65 @@ window.__ModuleLoader__.load({
       // two trees with identical geometry still re-fit when you switch between them.
       const signature = `${layout.width}x${layout.height}x${nodes.length}x${nodes[0] ? nodes[0].createdAt : 0}`;
 
-      // The host slot can report a box wider than the visible column, so clamp the
-      // fitting width to what the viewport can actually show.
-      const visibleWidth = () => {
-        const viewport = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1200;
-        return Math.max(320, viewport - 620);
-      };
+      /**
+       * Frame the tree inside whatever box the canvas currently reports.
+       *
+       * Measured against the real node extent, not layout.width (which carries
+       * padding), and driven by the element's own size so it stays correct after
+       * the host finishes laying the slot out — the first measurement often runs
+       * before that, which is what left the tree off-centre.
+       */
+      const computeFrame = useCallback((minScale = 0) => {
+        const el = svgRef.current;
+        const box = el ? el.getBoundingClientRect() : { width: 800, height: 600 };
+        const availW = Math.max(120, box.width || 0);
+        const availH = Math.max(120, box.height || 0);
+        const contentW = Math.max(1, bounds.maxX - bounds.minX);
+        const contentH = Math.max(1, bounds.maxY - bounds.minY);
+        // Width only: height-bound fitting shrank a 24-node tree to 0.4 and made
+        // every label unreadable. Vertical overflow is panned instead.
+        const fitScale = availW / contentW;
+        const scale = Math.max(minScale, Math.min(fitScale, 1.1));
+        const w = availW / scale;
+        const h = availH / scale;
+        return {
+          x: bounds.minX + contentW / 2 - w / 2,
+          y: bounds.minY + contentH / 2 - h / 2,
+          w,
+          h,
+        };
+      }, [bounds]);
+
+      const frameTree = useCallback(() => {
+        // Open at a readable scale even if that means panning; 0.75 * 12.8px is
+        // about 9.6px, which is the smallest this label font stays legible at.
+        setView(computeFrame(0.75));
+      }, [computeFrame]);
 
       useEffect(() => {
         if (fittedRef.current === signature) return;
         fittedRef.current = signature;
+        frameTree();
+      }, [signature, frameTree]);
+
+      // Re-frame when the canvas itself changes size: the host lays the slot out
+      // after the first paint, so an early fit is aimed at the wrong box.
+      useEffect(() => {
         const el = svgRef.current;
-        if (!el) return;
-        const box = el.getBoundingClientRect();
-        const availW = Math.max(200, Math.min(box.width || 800, visibleWidth()));
-        const availH = Math.max(200, box.height || 600);
-        // Fit to width only: height-bound fitting shrank a 24-node tree to 0.4
-        // and made every label unreadable. Vertical overflow is panned instead.
-        const scale = Math.min(availW / Math.max(1, layout.width), 1.1);
-        const w = availW / scale;
-        const h = availH / scale;
-        setView({
-          x: layout.width / 2 - w / 2,
-          y: layout.height / 2 - h / 2,
-          w,
-          h,
+        if (!el || typeof ResizeObserver !== 'function') return undefined;
+        let last = '';
+        const observer = new ResizeObserver((entries) => {
+          const entry = entries && entries[0];
+          const box = entry && entry.contentRect;
+          if (!box || box.width < 80) return;
+          const key = `${Math.round(box.width)}x${Math.round(box.height)}`;
+          if (key === last) return;
+          last = key;
+          frameTree();
         });
-      }, [signature, layout.width, layout.height]);
+        observer.observe(el);
+        return () => observer.disconnect();
+      }, [frameTree]);
 
       const visibleIds = useMemo(() => {
         const sorted = [...nodes].sort((a, b) => a.createdAt - b.createdAt);
@@ -1891,18 +1942,9 @@ window.__ModuleLoader__.load({
       }, [findings, onSelect, focusNode]);
 
       const fitAll = useCallback(() => {
-        const el = svgRef.current;
-        const box = el ? el.getBoundingClientRect() : { width: 800, height: 600 };
-        const viewport = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1200;
-        const availW = Math.max(200, Math.min(box.width || 800, Math.max(320, viewport - 620)));
-        const availH = Math.max(200, box.height || 600);
-        // Fit to width only: height-bound fitting shrank a 24-node tree to 0.4
-        // and made every label unreadable. Vertical overflow is panned instead.
-        const scale = Math.min(availW / Math.max(1, layout.width), 1.1);
-        const w = availW / scale;
-        const h = availH / scale;
-        animateTo({ x: layout.width / 2 - w / 2, y: layout.height / 2 - h / 2, w, h });
-      }, [layout, animateTo]);
+        // The ⤢ button is the "see everything" view: no readable-scale floor.
+        animateTo(computeFrame(0));
+      }, [computeFrame, animateTo]);
 
       // Expose the navigation controls so the toolbar can drive them too.
       useEffect(() => {
@@ -2529,6 +2571,27 @@ window.__ModuleLoader__.load({
      * Main panel
      * ------------------------------------------------------------------ */
 
+    /**
+     * The CSS width the panel may actually occupy.
+     *
+     * On this host innerWidth reports 1282 while the window is 1295 physical px
+     * at devicePixelRatio 1.25 — only ~1036 CSS px actually exist. innerWidth,
+     * documentElement.clientWidth and visualViewport all report the layout
+     * viewport, so take the smallest plausible candidate; outerWidth follows the
+     * real window.
+     */
+    function visibleViewportWidth() {
+      const doc = typeof document !== 'undefined' ? document.documentElement : null;
+      const candidates = [
+        doc ? doc.clientWidth : 0,
+        window.innerWidth || 0,
+        window.outerWidth || 0,
+        window.screen ? window.screen.availWidth || 0 : 0,
+      ].filter((value) => Number.isFinite(value) && value > 400);
+      if (!candidates.length) return 1200;
+      return Math.min(...candidates);
+    }
+
     function Panel(props) {
       // Load storage once, not twice: loadTrees normalises every tree and this
       // used to run again for the currentId initialiser.
@@ -2603,18 +2666,52 @@ window.__ModuleLoader__.load({
         if (!el) return undefined;
 
         const apply = () => {
-          const left = el.getBoundingClientRect().left;
-          const viewport = window.innerWidth || 1200;
-          const avail = Math.max(280, viewport - left - 10);
-          el.style.maxWidth = `${avail}px`;
-          el.style.height = `${Math.max(320, window.innerHeight - el.getBoundingClientRect().top - 8)}px`;
+          // Measure with the clamp released, otherwise the second run measures
+          // the already-clamped box and the width collapses step by step.
+          const previousWidth = el.style.maxWidth;
+          const previousHeight = el.style.height;
+          el.style.maxWidth = 'none';
+          el.style.height = 'auto';
+
+          const rect = el.getBoundingClientRect();
+          const parent = el.parentElement;
+          const parentBox = parent ? parent.getBoundingClientRect() : null;
+
+          // The host's page zoom makes innerWidth report layout px, not visible
+          // px, so ask the smallest plausible candidate instead.
+          const visibleWidth = visibleViewportWidth();
+
+          el.style.maxWidth = previousWidth || '';
+          el.style.height = previousHeight || '';
+
+          const parentRight =
+            parentBox && parentBox.width > 0 ? parentBox.left + parentBox.width : visibleWidth;
+          const rightEdge = Math.min(visibleWidth, parentRight);
+
+          const avail = Math.max(280, rightEdge - rect.left - 8);
+          const parentHeight =
+            parentBox && parentBox.height > 0 ? parentBox.height : Infinity;
+          const visibleHeight = window.innerHeight || 800;
+          const availHeight = Math.max(
+            320,
+            Math.min(visibleHeight - rect.top - 8, parentHeight),
+          );
+
+          el.style.maxWidth = `${Math.round(avail)}px`;
+          el.style.height = `${Math.round(availHeight)}px`;
         };
 
         apply();
         window.addEventListener('resize', apply);
+        const raf = typeof requestAnimationFrame === 'function'
+          ? requestAnimationFrame(apply)
+          : setTimeout(apply, 16);
         const timer = setTimeout(apply, 300);
         return () => {
           window.removeEventListener('resize', apply);
+          if (typeof cancelAnimationFrame === 'function' && typeof raf === 'number') {
+            cancelAnimationFrame(raf);
+          }
           clearTimeout(timer);
         };
       }, []);
