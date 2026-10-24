@@ -267,6 +267,15 @@ export function normalizeNodes(raw) {
     if (typeof record.note === 'string' && record.note.trim()) {
       extra.note = record.note;
     }
+    if (record.review && typeof record.review === 'object') {
+      const pick = (value) =>
+        Array.isArray(value) ? value.filter((x) => typeof x === 'string').slice(0, 4) : [];
+      extra.review = {
+        pros: pick(record.review.pros),
+        cons: pick(record.review.cons),
+        next: pick(record.review.next),
+      };
+    }
     if (Array.isArray(record.refs)) {
       const refs = record.refs
         .filter((r) => typeof r === 'string' && r.trim())

@@ -261,6 +261,15 @@ window.__ModuleLoader__.load({
         if (Number.isFinite(Number(item.line)) && Number(item.line) > 0) extra.line = Number(item.line);
         if (typeof item.annotation === 'string' && item.annotation.trim()) extra.annotation = item.annotation;
         if (typeof item.note === 'string' && item.note.trim()) extra.note = item.note;
+        if (item.review && typeof item.review === 'object') {
+          const pick = (value) =>
+            Array.isArray(value) ? value.filter((x) => typeof x === 'string').slice(0, 4) : [];
+          extra.review = {
+            pros: pick(item.review.pros),
+            cons: pick(item.review.cons),
+            next: pick(item.review.next),
+          };
+        }
         if (Array.isArray(item.refs)) {
           const refs = item.refs
             .filter((r) => typeof r === 'string' && r.trim())
@@ -1434,6 +1443,21 @@ window.__ModuleLoader__.load({
       .ttl-dock-count { font-variant-numeric: tabular-nums; }
       .ttl-dock-warn { color: #e8590c; font-weight: 700; font-variant-numeric: tabular-nums; }
       .ttl-dock-open { color: #2f6feb; font-weight: 700; }
+      .ttl-review {
+        display: flex; flex-direction: column; gap: 5px;
+        padding: 9px 11px; border-radius: 11px;
+        background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 55%, transparent);
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
+      }
+      .ttl-review-head {
+        font-family: var(--ttl-serif); font-size: 10px; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--dsw-alias-label-secondary, #888);
+      }
+      .ttl-review-row { display: flex; gap: 7px; font-size: 11px; line-height: 1.55; }
+      .ttl-review-tag { flex: none; width: 36px; font-weight: 700; }
+      .ttl-review-row.pros .ttl-review-tag { color: #37b24d; }
+      .ttl-review-row.cons .ttl-review-tag { color: #e8590c; }
+      .ttl-review-row.next .ttl-review-tag { color: #2f6feb; }
       .ttl-nav {
         position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px;
         padding: 6px; border-radius: 12px; z-index: 3;
@@ -1936,8 +1960,21 @@ window.__ModuleLoader__.load({
                     if (onAddChild) onAddChild(node.id);
                   },
                   onMouseEnter: () => {
-                    const parts = [node.note, node.annotation].filter(Boolean);
-                    setHoverNote(parts.join('\n\n'));
+                    const parts = [];
+                    if (node.note) parts.push(node.note);
+                    if (node.review) {
+                      if ((node.review.pros || []).length) {
+                        parts.push(`✓ 优点　${node.review.pros.join(' · ')}`);
+                      }
+                      if ((node.review.cons || []).length) {
+                        parts.push(`! 不足　${node.review.cons.join(' · ')}`);
+                      }
+                      if ((node.review.next || []).length) {
+                        parts.push(`→ 下一步　${node.review.next.join(' · ')}`);
+                      }
+                    }
+                    if (node.annotation) parts.push(`✎ 我的批注　${node.annotation}`);
+                    setHoverNote(parts.join('\n'));
                   },
                   onMouseLeave: () => setHoverNote(''),
                 },
@@ -2143,6 +2180,35 @@ window.__ModuleLoader__.load({
           h('button', { className: 'ttl-btn', onClick: () => onAddChild(node.id) }, '＋ 子节点'),
           h('button', { className: 'ttl-btn', onClick: () => onBranch(node.id) }, '⑂ 分支实验'),
         ),
+
+        node.review &&
+        ((node.review.pros || []).length ||
+          (node.review.cons || []).length ||
+          (node.review.next || []).length)
+          ? h(
+              'div',
+              { className: 'ttl-review' },
+              h('div', { className: 'ttl-review-head' }, '节点评价'),
+              (node.review.pros || []).length
+                ? h('div', { className: 'ttl-review-row pros' },
+                    h('span', { className: 'ttl-review-tag' }, '优点'),
+                    h('span', null, node.review.pros.join('；')),
+                  )
+                : null,
+              (node.review.cons || []).length
+                ? h('div', { className: 'ttl-review-row cons' },
+                    h('span', { className: 'ttl-review-tag' }, '不足'),
+                    h('span', null, node.review.cons.join('；')),
+                  )
+                : null,
+              (node.review.next || []).length
+                ? h('div', { className: 'ttl-review-row next' },
+                    h('span', { className: 'ttl-review-tag' }, '下一步'),
+                    h('span', null, node.review.next.join('；')),
+                  )
+                : null,
+            )
+          : null,
 
         h('label', { className: 'ttl-hint' }, '我的批注'),
         h('textarea', {

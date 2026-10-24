@@ -318,6 +318,49 @@ function stageOf(text) {
   };
 }
 
+/**
+ * A written review for one question: what it does well, what it leaves out, and
+ * the concrete next move. Deterministic on purpose — a review that changes every
+ * time you look is not a review.
+ */
+function reviewOf(text, stage) {
+  const value = String(text || '');
+  const pros = [];
+  const cons = [];
+  const next = [];
+
+  if (/\d+/.test(value)) pros.push('带了具体数字或规模，可以据此判断');
+  if (/优先|取舍|权衡|tradeoff/i.test(value)) pros.push('有取舍意识，不是全都要');
+  if (/因为|所以|由于|因此/.test(value)) pros.push('给了理由，不只是下结论');
+  if (/不要|避免|别|除了/.test(value)) pros.push('划了边界，说明不做什么');
+  if (value.length >= 40) pros.push('描述足够完整，场景能还原');
+  if (!pros.length) pros.push('意图清楚，方向可辨');
+
+  if (value.length < 20) cons.push('信息量偏少，缺上下文');
+  if (!/(完成|验收|跑通|通过|看到|输出|能用)/.test(value)) {
+    cons.push('没有验收标准，"做完"无法判断');
+  }
+  if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标，容易只做一半');
+  if (!/(现在|目前|已经|现状|之前)/.test(value)) cons.push('没交代现状，看不出差距');
+  if (stage === 'design' && !/(方案|选项|备选|对比)/.test(value)) {
+    cons.push('只要一个答案，没留备选');
+  }
+  if (!cons.length) cons.push('缺少明确的下一步指向');
+
+  const nextByStage = {
+    design: ['写一句“完成时能跑通什么”', '列 2-3 个备选再选'],
+    plan: ['把第 1 步写成任务卡：文件 + 测试 + 验收', '标出哪一步可以并行'],
+    build: ['先写一个会失败的测试', '把改动拆成 30 分钟以内的块'],
+    debug: ['写一条可证伪的假设', '先复现，再动代码'],
+    verify: ['列出预期输出并逐条对照', '留一条能重跑的命令'],
+    review: ['指定一个没参与的人来审', '先看接口再看实现'],
+  };
+  next.push(...(nextByStage[stage] || nextByStage.design));
+  if (cons.some((item) => item.includes('验收'))) next.push('补一行验收标准');
+
+  return { pros: pros.slice(0, 3), cons: cons.slice(0, 3), next: next.slice(0, 3) };
+}
+
 function pulseToTree(analysis, suggestions) {
   const nodes = [];
   const now = Date.now();
@@ -359,13 +402,14 @@ function pulseToTree(analysis, suggestions) {
   );
   analysis.userMessages.slice(-8).forEach((message, index) => {
     const stage = stageOf(message.text);
+    const review = reviewOf(message.text, stage.stage);
     push(
       threadNode.id,
       `${index + 1}. ${short(message.text, 20)}`,
       message.text,
       'action',
       `阶段：${stage.stage} · 推荐技能：${stage.skill}\n${stage.why}`,
-      { seq: message.seq, messageText: message.text, skill: stage.skill },
+      { seq: message.seq, messageText: message.text, skill: stage.skill, review },
     );
   });
 
