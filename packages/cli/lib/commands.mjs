@@ -592,6 +592,30 @@ export async function rhythmReport(dir, options = {}) {
  *
  * @param {{ cwd?: string, session?: string, format?: string }} [options]
  */
+/**
+ * Turn a plain chat transcript into session records.
+ *
+ * Blank-line separated blocks become turns. There is no role information in a
+ * plain export, so every block is treated as a prompt — which is exactly what the
+ * question review needs.
+ *
+ * @param {string} text
+ * @param {{ spaced?: boolean }} [options] `spaced` is for JSON-lines records.
+ */
+export function textToRecords(text) {
+  const blocks = String(text || '')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  return blocks.map((block, index) => ({
+    type: 'user/message',
+    seq: index + 1,
+    time: Date.now() - (blocks.length - index) * 60_000,
+    data: { content: [{ type: 'text', text: block }] },
+  }));
+}
+
 export async function pulseReport(options = {}) {
   let records;
   let sessionId = 'session-demo';
@@ -600,11 +624,18 @@ export async function pulseReport(options = {}) {
   if (options.demo) {
     const { DEMO_RECORDS } = await import('@thinking-treelog/core/demo-session');
     records = DEMO_RECORDS;
+  } else if (options.file) {
+    const read = options.readFile || fsReadFile;
+    const raw = String(await read(options.file, 'utf8'));
+    records = textToRecords(raw);
+    sessionId = options.file;
+    workspace = basename(options.file);
+    if (!records.length) throw new Error(`${options.file} has no blank-line separated turns`);
   } else {
     const workspaces = listWorkspaces(sessionsRoot());
     if (!workspaces.length) {
       throw new Error(
-        'no session logs under ~/.dsh/sessions — try `treelog pulse --demo` to see what this prints',
+        'no session logs under ~/.dsh/sessions — try `treelog pulse --demo`, or --file <transcript.txt>',
       );
     }
     const picked = pickSession(workspaces, {

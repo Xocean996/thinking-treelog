@@ -85,6 +85,24 @@ Or read a repo instead of a conversation:
 npx @thinking-treelog/cli rhythm .
 ```
 
+### Any transcript, not just dsh
+
+```bash
+treelog pulse --file chat.txt
+```
+
+Blank-line separated blocks become prompts, so an export from any tool works. The same
+request asked three ways:
+
+```
+我想给登录加个验证码                                              ○44
+顺手把注册、找回密码、手机绑定也做一下吧，顺便优化下 UI              ○32
+给 /login 加图形验证码，不用第三方。验收：不带 captcha 返回 400      ●76
+```
+
+Same intent. Only the third one tells you when it is done — and it scores 44 points
+higher. That number is the thing this tool is for.
+
 ## How it differs
 
 | | Reads your real session | Reviews your questions | Names the next move | No server, no key |
