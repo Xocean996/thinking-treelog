@@ -3031,10 +3031,31 @@ window.__ModuleLoader__.load({
         return data.review;
       };
 
+      /**
+       * Show the Conversation panel.
+       *
+       * The contract is `selectPanel(panelId: MainPanelId | null)` and it throws
+       * for an unregistered key: passing the string 'conversation' always threw,
+       * which the surrounding try/catch swallowed, so double-click silently did
+       * nothing. `null` is the documented way back to the conversation.
+       */
+      const showConversation = () => {
+        const layout = props && props.layout;
+        if (!layout || typeof layout.selectPanel !== 'function') return false;
+        try {
+          layout.selectPanel(null);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      };
+
       const jumpToChat = (node) => {
-        const text = node.messageText || node.text || '';
+        // Only messages can be located. Structural/tool nodes are aggregates and
+        // honestly have no single chat line to jump to.
+        const text = node.messageText || '';
         if (!text) {
-          setNotice('这个节点没有可跳转的对话消息');
+          setNotice('这是汇总节点，没有对应的单条消息；点一下可在右侧看它的评价与批注');
           return;
         }
         try {
@@ -3042,21 +3063,17 @@ window.__ModuleLoader__.load({
         } catch (err) {
           /* ignore */
         }
-        try {
-          if (props && props.layout && typeof props.layout.selectPanel === 'function') {
-            props.layout.selectPanel('conversation');
-          }
-        } catch (err) {
-          /* ignore */
-        }
 
-        // Scroll the matching message into view once the conversation paints.
-        const needle = String(text).trim().slice(0, 18);
-        if (needle) {
-          setTimeout(() => {
+        const switched = showConversation();
+
+        // Try to scroll the matching message into view once the conversation
+        // paints. Long conversations may be virtualised, so a miss is normal.
+        const needle = String(text).replace(/\s+/g, ' ').trim().slice(0, 16);
+        const locate = (attempt) => {
+          const found = (() => {
             try {
               const candidates = document.querySelectorAll('div, p, li, span');
-              const deadline = Date.now() + 500;
+              const deadline = Date.now() + 600;
               for (const element of candidates) {
                 if (Date.now() > deadline) break;
                 if (element.children.length > 0) continue;
@@ -3074,15 +3091,31 @@ window.__ModuleLoader__.load({
                 } catch (err) {
                   /* ignore */
                 }
-                break;
+                return true;
               }
             } catch (err) {
               /* ignore */
             }
-          }, 380);
-        }
+            return false;
+          })();
 
-        setNotice('已切到对话并定位到那条消息（也复制到了剪贴板）');
+          if (found) {
+            setNotice('已切到对话并定位到那条消息');
+            return;
+          }
+          if (attempt < 2) {
+            setTimeout(() => locate(attempt + 1), 500);
+            return;
+          }
+          setNotice(
+            switched
+              ? '已切到对话。这条消息不在当前渲染范围内，原文已复制，粘贴到搜索框即可定位'
+              : '原文已复制到剪贴板；无法自动切换面板，请手动点「对话」',
+          );
+        };
+
+        if (switched) setTimeout(() => locate(0), 320);
+        else locate(0);
       };
 
       const publishAnnotation = async (id) => {
@@ -3113,13 +3146,7 @@ window.__ModuleLoader__.load({
         }
 
         if (handed) {
-          try {
-            if (props && props.layout && typeof props.layout.selectPanel === 'function') {
-              props.layout.selectPanel('conversation');
-            }
-          } catch (err) {
-            /* ignore */
-          }
+          showConversation();
           setNotice('批注已写入输入框，按 Enter 发送即可执行');
           return;
         }
