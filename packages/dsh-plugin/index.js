@@ -21,7 +21,7 @@ const PORT = Number(process.env.TTL_PORT) || 17866;
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;
 const NOISE_RE =
-  /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|\[model changed:|\[skill\])/i;
+  /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|This is an automatically generated checkpoint|\[model changed:|\[skill\])/i;
 
 const short = (text, max = 40) => {
   const value = String(text || '').replace(/\s+/g, ' ').trim();

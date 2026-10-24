@@ -30,6 +30,16 @@ import {
 import { lintPlan, parsePlan, planToTree } from '@thinking-treelog/core/plan';
 import { analyzeRhythm, formatRhythm, rhythmToTree } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
+import {
+  analyzeConversation,
+  decodeSession,
+  formatPulse,
+  listWorkspaces,
+  pickSession,
+  sessionsRoot,
+  suggestNext,
+  threadOf,
+} from '@thinking-treelog/core/workspace';
 
 export const EXIT_CODES = { ok: 0, findings: 1, usage: 2 };
 
@@ -574,6 +584,47 @@ export async function rhythmReport(dir, options = {}) {
         : formatRhythm(analysis, { locale: options.locale });
 
   return { analysis, tree, text };
+}
+
+/**
+ * Read the current agent session log and report the thread of work.
+ *
+ * @param {{ cwd?: string, session?: string, format?: string }} [options]
+ */
+export async function pulseReport(options = {}) {
+  const workspaces = listWorkspaces(sessionsRoot());
+  if (!workspaces.length) {
+    throw new Error('no session logs found under ~/.dsh/sessions — run this from a machine with dsh history');
+  }
+
+  const picked = pickSession(workspaces, {
+    cwd: options.cwd || process.cwd(),
+    sessionId: options.session,
+  });
+  if (!picked) throw new Error('no matching session');
+
+  const analysis = analyzeConversation(decodeSession(picked.session.file));
+  const suggestions = suggestNext(analysis);
+
+  if (options.format === 'json') {
+    return JSON.stringify(
+      {
+        session: picked.session.id,
+        workspace: picked.workspace,
+        title: analysis.title,
+        turns: analysis.turns,
+        toolCalls: analysis.toolCalls,
+        tools: analysis.tools,
+        todos: analysis.todos,
+        thread: threadOf(analysis),
+        suggestions,
+      },
+      null,
+      2,
+    );
+  }
+
+  return formatPulse(analysis, suggestions, { thread: threadOf(analysis) });
 }
 
 /**

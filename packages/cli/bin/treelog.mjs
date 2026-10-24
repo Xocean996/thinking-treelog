@@ -21,6 +21,7 @@ import {
   loadConfig,
   loadTree,
   planTreeText,
+  pulseReport,
   renderAsciiTree,
   rhythmReport,
   tracePaths,
@@ -37,6 +38,7 @@ Usage:
                                         (superpowers writing-plans format)
   treelog trace <spec> <plan>           Check every spec decision has a task
   treelog rhythm [dir]                  Read the project's pace from git history
+  treelog pulse                         Read the current agent session: what you were doing
   treelog tree <file>                   Print the thought tree as ASCII
   treelog export <file> [options]       Export md | mermaid | adr | json | stats
   treelog diff <before> <after>         Compare two revisions of a decision
@@ -239,6 +241,22 @@ async function main() {
 
     // Tracing is an aid, not a gate: only fail when explicitly asked.
     return flags.failOn === 'unmatched' ? result.exitCode : EXIT_CODES.ok;
+  }
+
+  if (command === 'pulse') {
+    try {
+      const text = await pulseReport({
+        cwd: typeof flags.cwd === 'string' ? flags.cwd : undefined,
+        session: typeof flags.session === 'string' ? flags.session : undefined,
+        format: typeof flags.format === 'string' ? flags.format : 'text',
+      });
+      if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
+      else process.stdout.write(`${text}\n`);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      process.stderr.write(`treelog pulse: ${(error && error.message) || error}\n`);
+      return EXIT_CODES.usage;
+    }
   }
 
   if (command === 'rhythm') {

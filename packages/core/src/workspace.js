@@ -136,7 +136,7 @@ const textOf = (parts) =>
 // The harness injects reminders and turn timestamps into user messages; they are
 // not part of what the person asked.
 const NOISE_RE =
-  /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|\[model changed:|\[skill\])/i;
+  /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|This is an automatically generated checkpoint|\[model changed:|\[skill\])/i;
 const isNoise = (text) => NOISE_RE.test(String(text).trim());
 
 /**

@@ -1266,6 +1266,8 @@ window.__ModuleLoader__.load({
         -webkit-backdrop-filter: blur(22px) saturate(1.45);
       }
       .ttl-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+      .ttl-heat { display: flex; gap: 2px; padding: 0 14px 7px; align-items: flex-end; }
+      .ttl-heat-cell { flex: 1; height: 3px; border-radius: 2px; background: #2f6feb; }
       .ttl-side {
         width: 316px; flex: 0 1 316px; min-width: 240px;
         display: flex; flex-direction: column; min-height: 0;
@@ -3092,6 +3094,23 @@ window.__ModuleLoader__.load({
             h('button', { className: 'ttl-btn', onClick: () => setCutoff(totalNodes), disabled: !totalNodes }, '全部'),
           ),
         ),
+
+        // When you worked, at a glance: one bar per hour of the day.
+        current && Array.isArray(current.hourHistogram) && current.hourHistogram.length === 24
+          ? h(
+              'div',
+              { className: 'ttl-heat', title: '提问在一天里的分布' },
+              current.hourHistogram.map((count, hour) => {
+                const peak = Math.max(1, ...current.hourHistogram);
+                return h('div', {
+                  key: `heat-${hour}`,
+                  className: 'ttl-heat-cell',
+                  title: `${hour}:00 — ${count} 次`,
+                  style: { opacity: count ? 0.25 + (count / peak) * 0.75 : 0.1 },
+                });
+              }),
+            )
+          : null,
 
         h(
           'div',
