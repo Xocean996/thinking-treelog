@@ -3071,12 +3071,20 @@ window.__ModuleLoader__.load({
         }
       };
 
+      // Two trees often share a title ("工作区 · 某会话"), so a bare title makes the
+      // second export overwrite the first. Stamp the time.
+      const exportName = (tree, ext) => {
+        const safe = String(tree.title || 'tree').replace(/[\\/:*?"<>|]/g, '_');
+        const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, '');
+        return `${safe}-${stamp}.${ext}`;
+      };
+
       const exportJson = () => {
         if (!current) return;
         // Export every field the panel can restore, not a hand-picked few: a
         // backup that drops annotations and reviews is not a backup.
         download(
-          `${current.title.replace(/[\\/:*?"<>|]/g, '_')}.json`,
+          exportName(current, 'json'),
           JSON.stringify(
             {
               title: current.title,
@@ -3094,17 +3102,17 @@ window.__ModuleLoader__.load({
 
       const exportMarkdown = () => {
         if (!current) return;
-        download(`${current.title.replace(/[\\/:*?"<>|]/g, '_')}.md`, treeToMarkdown(current), 'text/markdown');
+        download(exportName(current, 'md'), treeToMarkdown(current), 'text/markdown');
       };
 
       const exportMermaid = () => {
         if (!current) return;
-        download(`${current.title.replace(/[\\/:*?"<>|]/g, '_')}.mmd`, treeToMermaid(current), 'text/plain');
+        download(exportName(current, 'mmd'), treeToMermaid(current), 'text/plain');
       };
 
       const exportAdr = () => {
         if (!current) return;
-        download(`${current.title.replace(/[\\/:*?"<>|]/g, '_')}.adr.md`, treeToAdr(current), 'text/markdown');
+        download(exportName(current, 'adr.md'), treeToAdr(current), 'text/markdown');
       };
 
       const copyMarkdown = async () => {

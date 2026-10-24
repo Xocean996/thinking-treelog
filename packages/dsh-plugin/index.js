@@ -27,6 +27,15 @@ const DAY_MS = 86400000;
 export const NOISE_RE =
   /^(<system-reminder>|Time sampled while preparing|Current runtime context\.|This is an automatically generated checkpoint|\[model changed:|\[skill\])/i;
 
+/** Whole days between two instants on the local calendar, matching the hour histogram. */
+function localDayDiff(fromTs, toTs = Date.now()) {
+  const from = new Date(fromTs);
+  const to = new Date(toTs);
+  from.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((to.getTime() - from.getTime()) / DAY_MS));
+}
+
 const short = (text, max = 40) => {
   // Code points, not UTF-16 units.
   const chars = Array.from(String(text == null ? '' : text).replace(/\s+/g, ' ').trim());
@@ -320,7 +329,7 @@ export function suggestNext(analysis, now = Date.now()) {
     });
   }
 
-  const idleDays = analysis.lastAt ? Math.floor((now - analysis.lastAt) / DAY_MS) : null;
+  const idleDays = analysis.lastAt ? localDayDiff(analysis.lastAt, now) : null;
   if (idleDays !== null && idleDays >= 3) {
     out.push({
       kind: 'superpowers',

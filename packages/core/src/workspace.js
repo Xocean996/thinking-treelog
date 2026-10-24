@@ -19,6 +19,23 @@ import { join } from 'node:path';
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;
 
+/**
+ * Whole days between two instants, counted on the local calendar.
+ *
+ * The hour histogram uses local hours, so the idle counter must too: a raw
+ * millisecond difference disagrees with it near midnight and across DST.
+ *
+ * @param {number} fromTs
+ * @param {number} [toTs]
+ */
+export function localDayDiff(fromTs, toTs = Date.now()) {
+  const from = new Date(fromTs);
+  const to = new Date(toTs);
+  from.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((to.getTime() - from.getTime()) / DAY_MS));
+}
+
 /** @param {string} [home] */
 export function sessionsRoot(home = homedir()) {
   return join(home, '.dsh', 'sessions');
@@ -481,7 +498,7 @@ export function suggestNext(analysis, options = {}) {
     });
   }
 
-  const idleDays = analysis.lastAt ? Math.floor((now - analysis.lastAt) / DAY_MS) : null;
+  const idleDays = analysis.lastAt ? localDayDiff(analysis.lastAt, now) : null;
   if (idleDays !== null && idleDays >= 3) {
     out.push({
       kind: 'superpowers',
@@ -532,7 +549,7 @@ export function formatPulse(analysis, suggestions, extra = {}) {
     `  ${analysis.turns} 轮 · ${analysis.messages.length} 条消息 · ${analysis.toolCalls} 次工具调用`,
   );
   if (analysis.lastAt) {
-    const idle = Math.floor((Date.now() - analysis.lastAt) / DAY_MS);
+    const idle = localDayDiff(analysis.lastAt);
     lines.push(idle === 0 ? '  今天仍在推进' : `  最近一次活动在 ${idle} 天前`);
   }
 
