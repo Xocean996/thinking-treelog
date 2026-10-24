@@ -112,7 +112,14 @@ function listWorkspaces(root) {
   return out;
 }
 
-function pickSession(workspaces, wantCwd) {
+function pickSession(workspaces, wantCwd, sessionId) {
+  if (sessionId) {
+    for (const entry of workspaces) {
+      const found = entry.sessions.find((session) => session.id === sessionId);
+      if (found) return { workspace: entry.workspace, session: found };
+    }
+  }
+
   const target = String(wantCwd || '').toLowerCase().replace(/[\\/]+$/, '');
   if (target) {
     for (const entry of workspaces) {
@@ -384,12 +391,22 @@ function pulseToTree(analysis, suggestions) {
     '每条建议都附带一个可执行的 treelog 检查，避免只给口号。',
   );
   suggestions.forEach((item) => {
-    push(
+    const advice = push(
       suggestNode.id,
       item.title,
       item.why,
       item.kind === 'superpowers' ? 'action' : 'conclusion',
-      `${item.why}\n\n创新点：${item.novelty}`,
+      `${item.why}`,
+      { move: item.move },
+    );
+    // The innovation angle becomes a virtual child you can edit or delete.
+    push(
+      advice.id,
+      `创新：${short(item.novelty, 16)}`,
+      item.novelty,
+      'conclusion',
+      '自动生成的创新视角。可以编辑、加批注，或直接删掉。',
+      { virtual: true },
     );
   });
 
@@ -413,6 +430,36 @@ function handle(req, res) {
     return send(res, 200, { ok: true, version: VERSION });
   }
 
+  if (url.pathname === '/sessions') {
+    try {
+      const workspaces = listWorkspaces(sessionsRoot());
+      return send(res, 200, {
+        ok: true,
+        workspaces: workspaces.slice(0, 12).map((entry) => ({
+          workspace: entry.workspace,
+          cwd: decodeSession(entry.sessions[0].file, 2, 2).find((r) => r.type === 'session')?.cwd || '',
+          sessions: entry.sessions.slice(0, 20).map((session) => {
+            let title = '';
+            try {
+              const head = decodeSession(session.file, 10, 10);
+              const record = head.find((r) => r.type === 'session/title');
+              if (record && record.data && record.data.title) title = record.data.title;
+              if (!title) {
+                const firstAsk = head.find((r) => r.type === 'user/message');
+                if (firstAsk) title = short(textOf(firstAsk.data && firstAsk.data.content), 22);
+              }
+            } catch {
+              /* ignore */
+            }
+            return { id: session.id, title, mtime: session.mtime };
+          }),
+        })),
+      });
+    } catch (error) {
+      return send(res, 500, { ok: false, error: String(error && error.message) });
+    }
+  }
+
   if (url.pathname !== '/pulse') {
     return send(res, 404, { ok: false, error: 'not found' });
   }
@@ -422,7 +469,8 @@ function handle(req, res) {
     if (!workspaces.length) return send(res, 404, { ok: false, error: 'no sessions' });
 
     const cwd = url.searchParams.get('cwd') || process.cwd();
-    const picked = pickSession(workspaces, cwd);
+    const sessionId = url.searchParams.get('session') || '';
+    const picked = pickSession(workspaces, cwd, sessionId || undefined);
     if (!picked) return send(res, 404, { ok: false, error: 'no matching session' });
 
     const records = decodeSession(picked.session.file);

@@ -1500,6 +1500,33 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
+      // Expose the composer handle so the panel can hand an annotation over
+      // instead of only copying it. Method names differ across builds, so probe.
+      useEffect(() => {
+        const api = props.inputActions;
+        if (!api) return undefined;
+        window.__ttlCompose = (text) => {
+          for (const name of ['setText', 'setValue', 'replaceText', 'insertText', 'append']) {
+            try {
+              if (typeof api[name] === 'function') {
+                api[name](text);
+                return true;
+              }
+            } catch (error) {
+              /* try the next name */
+            }
+          }
+          return false;
+        };
+        return () => {
+          try {
+            delete window.__ttlCompose;
+          } catch (error) {
+            /* ignore */
+          }
+        };
+      }, [props.inputActions]);
+
       const latest = trees[0];
       const issues = useMemo(() => {
         if (!latest || !latest.nodes || !latest.nodes.length) return 0;
@@ -2219,6 +2246,31 @@ window.__ModuleLoader__.load({
       const [showSettings, setShowSettings] = useState(false);
       const [showSidebar, setShowSidebar] = useState(true);
       const [focusMode, setFocusMode] = useState(false);
+      const [sessionOptions, setSessionOptions] = useState([]);
+      const [targetSession, setTargetSession] = useState('');
+
+      useEffect(() => {
+        fetch('http://127.0.0.1:17866/sessions', { cache: 'no-store' })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => {
+            if (!data || !data.ok || !Array.isArray(data.workspaces)) return;
+            const flat = [];
+            data.workspaces.forEach((workspace) => {
+              (workspace.sessions || []).forEach((session) => {
+                flat.push({
+                  id: session.id,
+                  label: session.title || session.id.replace(/^session-/, '').slice(0, 10),
+                  mtime: session.mtime || 0,
+                });
+              });
+            });
+            flat.sort((a, b) => b.mtime - a.mtime);
+            setSessionOptions(flat.slice(0, 30));
+          })
+          .catch(() => {
+            /* Host bridge not up yet */
+          });
+      }, []);
 
       const layoutRef = useRef(null);
       const canvasApi = useRef(null);
@@ -2324,7 +2376,10 @@ window.__ModuleLoader__.load({
         setError('');
         setNotice('');
         try {
-          const response = await fetch('http://127.0.0.1:17866/pulse', { cache: 'no-store' });
+          const endpoint = targetSession
+            ? `http://127.0.0.1:17866/pulse?session=${encodeURIComponent(targetSession)}`
+            : 'http://127.0.0.1:17866/pulse';
+          const response = await fetch(endpoint, { cache: 'no-store' });
           if (!response.ok) throw new Error(`本地分析服务返回 ${response.status}`);
           const data = await response.json();
           if (!data.ok) throw new Error(data.error || '分析失败');
@@ -2503,7 +2558,6 @@ window.__ModuleLoader__.load({
             /* ignore */
           }
         }
-        setNotice('已复制这条内容；切到对话后粘贴即可定位到对应段落');
         try {
           if (props && props.layout && typeof props.layout.selectPanel === 'function') {
             props.layout.selectPanel('conversation');
@@ -2511,13 +2565,71 @@ window.__ModuleLoader__.load({
         } catch (err) {
           /* ignore */
         }
+
+        // Scroll the matching message into view once the conversation paints.
+        const needle = String(text).trim().slice(0, 18);
+        if (needle) {
+          setTimeout(() => {
+            try {
+              const candidates = document.querySelectorAll('div, p, li, span');
+              const deadline = Date.now() + 500;
+              for (const element of candidates) {
+                if (Date.now() > deadline) break;
+                if (element.children.length > 0) continue;
+                const content = element.textContent || '';
+                if (!content.includes(needle)) continue;
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                try {
+                  element.animate(
+                    [
+                      { backgroundColor: 'rgba(47,111,235,0.32)' },
+                      { backgroundColor: 'transparent' },
+                    ],
+                    { duration: 1800, easing: 'ease-out' },
+                  );
+                } catch (err) {
+                  /* ignore */
+                }
+                break;
+              }
+            } catch (err) {
+              /* ignore */
+            }
+          }, 380);
+        }
+
+        setNotice('已切到对话并定位到那条消息（也复制到了剪贴板）');
       };
 
-      const publishAnnotation = async (id) => {        const target = nodes.find((n) => n.id === id);
+      const publishAnnotation = async (id) => {
+        const target = nodes.find((n) => n.id === id);
         if (!target || !target.annotation) {
           setNotice('先写一条批注');
           return;
         }
+
+        // Prefer handing the text to the composer; fall back to the clipboard.
+        let handed = false;
+        try {
+          if (typeof window.__ttlCompose === 'function') {
+            handed = window.__ttlCompose(target.annotation) === true;
+          }
+        } catch (err) {
+          handed = false;
+        }
+
+        if (handed) {
+          try {
+            if (props && props.layout && typeof props.layout.selectPanel === 'function') {
+              props.layout.selectPanel('conversation');
+            }
+          } catch (err) {
+            /* ignore */
+          }
+          setNotice('批注已写入输入框，按 Enter 发送即可执行');
+          return;
+        }
+
         try {
           await navigator.clipboard.writeText(target.annotation);
           setNotice('批注已复制到剪贴板，粘贴到输入框发送即可在当前工作区执行');
@@ -2713,6 +2825,18 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'ttl-bar-row' },
+            h('select', {
+              className: 'ttl-select',
+              value: targetSession,
+              onChange: (e) => setTargetSession(e.target.value),
+              title: '选择要分析的会话（默认分析当前工作区）',
+              style: { maxWidth: 190 },
+            },
+              h('option', { value: '' }, '当前工作区'),
+              sessionOptions.map((session) =>
+                h('option', { key: session.id, value: session.id }, session.label),
+              ),
+            ),
             h('input', {
               className: 'ttl-input',
               placeholder: '搜索节点…',
