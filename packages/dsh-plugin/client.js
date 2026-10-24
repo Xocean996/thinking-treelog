@@ -1224,7 +1224,12 @@ window.__ModuleLoader__.load({
         --ttl-art: linear-gradient(100deg, #8fb4ff 0%, #c9a6ff 54%, #ff9ec4 100%);
         font-family: var(--ttl-serif);
         display: flex; flex-direction: column; height: 100%; min-height: 0;
-        width: 100%; max-width: calc(100vw - 300px); min-width: 0;
+        /* The host gives this slot ~990 CSS px while the window has ~1030, so a
+           viewport-relative max-width is useless here: fill the slot and let the
+           canvas shrink instead. */
+        width: 100%; max-width: 100%; min-width: 0;
+        max-height: 100%;
+        overflow: hidden;
         box-sizing: border-box;
         overflow: hidden;
         background:
@@ -1347,9 +1352,10 @@ window.__ModuleLoader__.load({
       .ttl-tree-item .meta { font-size: 10px; color: var(--dsw-alias-label-secondary, #888); }
       .ttl-canvas {
         flex: 1; position: relative; min-width: 0; overflow: hidden;
-        /* The host slot reports a wider box than the visible column; cap the
-           canvas so the SVG's 100% resolves to what's actually on screen. */
-        max-width: min(100%, calc(100vw - 620px));
+        /* Measured on this host: the slot starts around x=755 and the window is
+           1295 wide, so a 662px canvas ran 122px past the right edge. Keep the
+           canvas inside the window; the sidebar sets the remaining room. */
+        max-width: calc(100vw - 760px);
         background-color: transparent;
         background-image: radial-gradient(
           circle,
@@ -2571,6 +2577,35 @@ window.__ModuleLoader__.load({
 
       const layoutRef = useRef(null);
       const canvasApi = useRef(null);
+      const rootRef = useRef(null);
+
+      /**
+       * The host hands this slot a box wider than the window (measured: ~990 CSS
+       * px starting at x=286, where the window is ~1030 wide), so everything to
+       * the right of ~740px is clipped — the tree, the export row, the detail
+       * rail. Percentage widths cannot fix that because the parent is already
+       * too wide; measure the real viewport and clamp here.
+       */
+      useEffect(() => {
+        const el = rootRef.current;
+        if (!el) return undefined;
+
+        const apply = () => {
+          const left = el.getBoundingClientRect().left;
+          const viewport = window.innerWidth || 1200;
+          const avail = Math.max(280, viewport - left - 10);
+          el.style.maxWidth = `${avail}px`;
+          el.style.height = `${Math.max(320, window.innerHeight - el.getBoundingClientRect().top - 8)}px`;
+        };
+
+        apply();
+        window.addEventListener('resize', apply);
+        const timer = setTimeout(apply, 300);
+        return () => {
+          window.removeEventListener('resize', apply);
+          clearTimeout(timer);
+        };
+      }, []);
 
       const current = useMemo(
         () => trees.find((t) => t.id === currentId) || null,
@@ -3131,6 +3166,7 @@ window.__ModuleLoader__.load({
         'div',
         {
           className: 'ttl-root',
+          ref: rootRef,
           onDragOver: (event) => event.preventDefault(),
           onDrop: onDropFile,
         },
