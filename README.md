@@ -103,6 +103,52 @@ request asked three ways:
 Same intent. Only the third one tells you when it is done — and it scores 44 points
 higher. That number is the thing this tool is for.
 
+### The report you actually have to write: `treelog weekly`
+
+```bash
+treelog weekly . --days 7
+```
+
+Fridays, under time pressure, someone reconstructs a week from memory. This takes it from
+git — including the part nobody wants to admit in a status update.
+
+```markdown
+# 周报 · thinking-treelog
+
+周期：2026-10-23 → 2026-10-24（近 7 天）
+
+**41 次提交 · 2 个活跃日 · +14254 / −1021 行**
+
+## 交付了什么
+- 功能：25 次
+- 修复：15 次
+- 测试：1 次
+
+## 精力花在哪
+| 文件 | 改动次数 | 新增 | 删除 |
+|---|---|---|---|
+| `packages/dsh-plugin/client.js` | 34 | +4314 | −498 |
+| `packages/cli/lib/commands.mjs` | 13 | +944 | −129 |
+
+## 需要说明的
+- **27 次改动只动了源码、没动测试**——这是最值得在评审里说清楚的部分。
+  - `a27f828` feat: real panel screenshots
+  - `56a5254` feat(panel): visual polish
+- 6 次提交在 23 点后——连续熬夜通常会在两周内变成 bug。
+
+## 下周只改一件事
+- 补 1 条针对最高频改动文件的测试（`packages/dsh-plugin/client.js`）。
+```
+
+Three things it does that a `git log --oneline` cannot:
+
+- **risk, not activity** — a commit that changed source and no test is flagged, because
+  that is what a reviewer will ask about
+- **effort, not count** — `client.js` touched 34 times says more than "41 commits"
+- **one action, never ten** — a report with ten follow-ups gets none of them done
+
+Every number is computed; the judgement is left to you, and the footer says so.
+
 ### Close the loop: `treelog retro`
 
 ```bash

@@ -28,7 +28,7 @@ import {
   toSarif,
 } from '@thinking-treelog/core/engineering';
 import { lintPlan, parsePlan, planToTree } from '@thinking-treelog/core/plan';
-import { analyzeRhythm, formatRhythm, rhythmToTree } from '@thinking-treelog/core/rhythm';
+import { analyzeRhythm, formatRhythm, formatWeekly, rhythmToTree, weeklyFacts } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 import {
   analyzeConversation,
@@ -589,6 +589,37 @@ export async function rhythmReport(dir, options = {}) {
         : formatRhythm(analysis, { locale: options.locale });
 
   return { analysis, tree, text };
+}
+
+/**
+ * The weekly report: the artifact a person actually has to hand in.
+ *
+ * @param {string} dir
+ * @param {{ days?: number, now?: number, locale?: string, format?: string, name?: string }} [options]
+ */
+export async function weeklyReport(dir, options = {}) {
+  const facts = weeklyFacts(dir, { days: options.days, now: options.now });
+
+  if (options.format === 'json') {
+    return JSON.stringify(
+      {
+        project: facts.dir,
+        days: facts.days,
+        commits: facts.commitCount,
+        activeDays: facts.activeDays.length,
+        added: facts.totalAdded,
+        deleted: facts.totalDeleted,
+        themes: facts.themes,
+        files: facts.files,
+        untestedCount: facts.untestedCount,
+        lateNight: facts.lateNight,
+      },
+      null,
+      2,
+    );
+  }
+
+  return formatWeekly(facts, { locale: options.locale, name: options.name });
 }
 
 /**

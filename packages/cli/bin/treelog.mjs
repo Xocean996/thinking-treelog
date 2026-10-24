@@ -25,6 +25,7 @@ import {
   renderAsciiTree,
   retroReport,
   rhythmReport,
+  weeklyReport,
   tracePaths,
 } from '../lib/commands.mjs';
 
@@ -39,6 +40,7 @@ Usage:
                                         (superpowers writing-plans format)
   treelog trace <spec> <plan>           Check every spec decision has a task
   treelog rhythm [dir]                  Read the project's pace from git history
+  treelog weekly [dir] [--days N]       Weekly report: delivered, risky, next step
   treelog pulse [--demo|--file <t>]       Read the current session: what you were doing
   treelog retro [--demo|--file <t>]       Write a Markdown retro you can paste into a PR
   treelog tree <file>                   Print the thought tree as ASCII
@@ -276,6 +278,24 @@ async function main() {
       return EXIT_CODES.ok;
     } catch (error) {
       process.stderr.write(`treelog retro: ${(error && error.message) || error}\n`);
+      return EXIT_CODES.usage;
+    }
+  }
+
+  if (command === 'weekly') {
+    const dir = files[0] || process.cwd();
+    try {
+      const text = await weeklyReport(dir, {
+        days: flags.days ? Number(flags.days) : undefined,
+        format: typeof flags.format === 'string' ? flags.format : 'text',
+        locale: typeof flags.lang === 'string' ? flags.lang : 'zh',
+        name: typeof flags.name === 'string' ? flags.name : undefined,
+      });
+      if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
+      else process.stdout.write(`${text}\n`);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      process.stderr.write(`treelog weekly: ${(error && error.message) || error}\n`);
       return EXIT_CODES.usage;
     }
   }
