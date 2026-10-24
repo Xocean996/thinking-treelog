@@ -9,7 +9,11 @@ import {
   analyzeConversation,
   decodeSession,
   formatPulse,
+  formatRetro,
   pickSession,
+  reviewQuestion,
+  scoreQuestion,
+  stageOf,
   suggestNext,
   threadOf,
 } from '../packages/core/src/workspace.js';
@@ -164,4 +168,48 @@ test('pickSession falls back to the newest workspace', () => {
   ];
   const picked = pickSession(workspaces, { cwd: '/different' });
   assert.equal(picked.workspace, 'newest');
+});
+
+test('scoreQuestion rewards acceptance lines and punishes stacked goals', () => {
+  const vague = scoreQuestion('这个再优化一下');
+  const stacked = scoreQuestion('顺手把注册、找回密码、手机绑定也做一下吧，还有监控');
+  const precise = scoreQuestion(
+    'QPS 200 时丢 0.3%，想 5 秒内重试 3 次。不要动下游幂等，验收：压测 1000 次零丢失。',
+  );
+
+  assert.ok(precise > 70, `precise should score high, got ${precise}`);
+  assert.ok(stacked < vague, 'stacked goals should score below a merely vague ask');
+  assert.ok(vague < 50);
+});
+
+test('stageOf maps questions to work stages', () => {
+  assert.equal(stageOf('报错了，走不通'), 'debug');
+  assert.equal(stageOf('跑一下测试验证'), 'verify');
+  assert.equal(stageOf('出个计划拆成任务'), 'plan');
+  assert.equal(stageOf('帮我实现这个函数'), 'build');
+  assert.equal(stageOf('审查一下这段代码'), 'review');
+  assert.equal(stageOf('我想做个新东西'), 'design');
+});
+
+test('reviewQuestion names what is missing and offers a rewrite', () => {
+  const review = reviewQuestion('这个再优化一下');
+  assert.ok(review.cons.includes('没有验收标准'));
+  assert.ok(review.cons.includes('信息量偏少'));
+  assert.match(review.rewrite, /验收：/);
+  assert.match(review.rewrite, /约束：/);
+});
+
+test('formatRetro writes a pasteable Markdown retro', () => {
+  const analysis = analyzeConversation(decodeSession(makeSessionFile(RECORDS)));
+  const text = formatRetro(analysis, { now: Date.UTC(2026, 9, 24, 12) });
+
+  assert.match(text, /^# 复盘 · 演示项目/);
+  assert.match(text, /## 做了什么/);
+  assert.match(text, /## 完成情况/);
+  assert.match(text, /- \[x\] 读入口文件/);
+  assert.match(text, /- \[ \] 补上入口守卫/);
+  assert.match(text, /## 提问质量/);
+  assert.match(text, /\| 1 \| \d+ \|/);
+  assert.match(text, /## 下次注意/);
+  assert.match(text, /生成于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
 });

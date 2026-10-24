@@ -255,8 +255,7 @@ const short = (text, max = 46) => {
 
 /**
  * How well-formed is a question? Numbers, a stated acceptance line, a reason,
- * and no stacked goals. Same rules the panel uses, kept here so the terminal can
- * report a trend without depending on the plugin.
+ * and no stacked goals.
  *
  * @param {string} text
  */
@@ -271,6 +270,169 @@ export function scoreQuestion(text) {
   if (/同时|以及|还有|顺便/.test(value)) score -= 12;
   if (!/(现在|目前|已经|现状|之前)/.test(value)) score -= 6;
   return Math.max(10, Math.min(98, score));
+}
+
+/**
+ * Which stage of work a question belongs to.
+ *
+ * @param {string} text
+ */
+export function stageOf(text) {
+  const value = String(text || '');
+  if (/报错|错误|bug|失败|调试|排查|不工作|fix|error|debug|broken/i.test(value)) return 'debug';
+  if (/测试|验证|确认|验收|test|verify|coverage/i.test(value)) return 'verify';
+  if (/审查|评审|review|看看有没有问题/i.test(value)) return 'review';
+  if (/计划|步骤|拆解|任务|路线|plan|roadmap/i.test(value)) return 'plan';
+  if (/实现|写|改|重构|加一个|build|implement|refactor/i.test(value)) return 'build';
+  return 'design';
+}
+
+/**
+ * Review one question: what it does well, what it leaves out, the next move, and
+ * a rewrite that fills the gap.
+ *
+ * @param {string} text
+ */
+export function reviewQuestion(text) {
+  const value = String(text || '');
+  const stage = stageOf(value);
+  const pros = [];
+  const cons = [];
+
+  if (/\d+/.test(value)) pros.push('带了具体数字或规模');
+  if (/优先|取舍|权衡|tradeoff/i.test(value)) pros.push('有取舍意识');
+  if (/因为|所以|由于|因此/.test(value)) pros.push('给了理由');
+  if (/不要|避免|别|除了/.test(value)) pros.push('划了边界');
+  if (value.length >= 40) pros.push('描述足够完整');
+
+  if (value.length < 20) cons.push('信息量偏少');
+  if (!/(完成|验收|跑通|通过|输出|能用)/.test(value)) cons.push('没有验收标准');
+  if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标');
+  if (!/(现在|目前|已经|现状|之前)/.test(value)) cons.push('没交代现状');
+
+  const acceptance = {
+    design: '完成时能拿出 2 个备选，并说明各自代价',
+    plan: '完成时有一份可执行的任务清单，每步带验收',
+    build: '完成时测试通过，且能跑通一个真实场景',
+    debug: '完成时能复现→定位→修复，并留下一条回归测试',
+    verify: '完成时每条预期输出都能对上',
+    review: '完成时有一个没参与的人给出具体意见',
+  }[stage];
+
+  return {
+    stage,
+    score: scoreQuestion(value),
+    pros: pros.length ? pros : ['意图清楚'],
+    cons: cons.length ? cons : ['缺少明确的下一步'],
+    rewrite: `「${short(value, 34)}」\n验收：${acceptance}。约束：只改一处，其余保持不动。`,
+  };
+}
+
+/**
+ * A closing report for one session, as Markdown you can paste into a PR.
+ *
+ * @param {ReturnType<typeof analyzeConversation>} analysis
+ * @param {{ now?: number }} [options]
+ */
+export function formatRetro(analysis, options = {}) {
+  const now = options.now ?? Date.now();
+  const reviews = analysis.userMessages.map((message) => ({
+    text: message.text,
+    time: message.time,
+    ...reviewQuestion(message.text),
+  }));
+  const scores = reviews.map((review) => review.score);
+  const average = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const worst = reviews.length
+    ? reviews.reduce((low, review) => (review.score < low.score ? review : low), reviews[0])
+    : null;
+  const done = (analysis.todos || []).filter((todo) => todo && todo.status === 'completed');
+  const open = (analysis.todos || []).filter((todo) => todo && todo.status !== 'completed');
+  const spanMinutes = analysis.startedAt && analysis.lastAt
+    ? Math.max(1, Math.round((analysis.lastAt - analysis.startedAt) / 60000))
+    : null;
+
+  const lines = [];
+  lines.push(`# 复盘 · ${analysis.title || '(未命名会话)'}`);
+  lines.push('');
+  lines.push(
+    `**${analysis.userMessages.length} 次提问 · ${analysis.toolCalls} 次工具调用` +
+      `${spanMinutes ? ` · 历时 ${spanMinutes} 分钟` : ''} · 提问均值 ${average}**`,
+  );
+  lines.push('');
+
+  if (reviews.length) {
+    lines.push('## 做了什么');
+    lines.push('');
+    reviews.forEach((review, index) => {
+      lines.push(`${index + 1}. ${short(review.text, 60)}`);
+    });
+    lines.push('');
+  }
+
+  if (done.length || open.length) {
+    lines.push('## 完成情况');
+    lines.push('');
+    done.forEach((todo) => lines.push(`- [x] ${todo.content}`));
+    open.forEach((todo) => lines.push(`- [ ] ${todo.content}`));
+    lines.push('');
+  }
+
+  if (reviews.length) {
+    lines.push('## 提问质量');
+    lines.push('');
+    lines.push('| # | 分数 | 提问 | 缺什么 |');
+    lines.push('|---|---|---|---|');
+    reviews.forEach((review, index) => {
+      lines.push(
+        `| ${index + 1} | ${review.score} | ${short(review.text, 34)} | ${
+          review.cons.filter((item) => item !== '缺少明确的下一步').join('、') || '—'
+        } |`,
+      );
+    });
+    lines.push('');
+  }
+
+  if (worst && worst.score < 60) {
+    lines.push('## 最该改写的一条');
+    lines.push('');
+    lines.push(`> ${short(worst.text, 80)}`);
+    lines.push('');
+    lines.push('改成：');
+    lines.push('');
+    lines.push('```');
+    lines.push(worst.rewrite);
+    lines.push('```');
+    lines.push('');
+  }
+
+  const notes = [];
+  if (worst && worst.cons.includes('塞了多个目标')) {
+    const stacked = reviews.filter((review) => review.cons.includes('塞了多个目标')).length;
+    notes.push(`一次只提一个目标——这轮有 ${stacked} 条提问把多件事塞进了一句。`);
+  }
+  if (reviews.some((review) => review.cons.includes('没有验收标准'))) {
+    notes.push('每条提问带一行验收：做完时能跑通什么。');
+  }
+  if (open.length) {
+    notes.push(`收尾前把 ${open.length} 个未完成项写进下一单，别让它悬着。`);
+  }
+
+  if (notes.length) {
+    lines.push('## 下次注意');
+    lines.push('');
+    notes.forEach((note) => lines.push(`- ${note}`));
+    lines.push('');
+  }
+
+  lines.push('---');
+  const stamp = new Date(now);
+  const pad = (value) => String(value).padStart(2, '0');
+  lines.push(
+    `生成于 ${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())} ` +
+      `${pad(stamp.getHours())}:${pad(stamp.getMinutes())}`,
+  );
+  return lines.join('\n');
 }
 
 /**

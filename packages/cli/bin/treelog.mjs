@@ -23,6 +23,7 @@ import {
   planTreeText,
   pulseReport,
   renderAsciiTree,
+  retroReport,
   rhythmReport,
   tracePaths,
 } from '../lib/commands.mjs';
@@ -39,6 +40,7 @@ Usage:
   treelog trace <spec> <plan>           Check every spec decision has a task
   treelog rhythm [dir]                  Read the project's pace from git history
   treelog pulse [--demo|--file <t>]       Read the current session: what you were doing
+  treelog retro [--demo|--file <t>]       Write a Markdown retro you can paste into a PR
   treelog tree <file>                   Print the thought tree as ASCII
   treelog export <file> [options]       Export md | mermaid | adr | json | stats
   treelog diff <before> <after>         Compare two revisions of a decision
@@ -257,6 +259,23 @@ async function main() {
       return EXIT_CODES.ok;
     } catch (error) {
       process.stderr.write(`treelog pulse: ${(error && error.message) || error}\n`);
+      return EXIT_CODES.usage;
+    }
+  }
+
+  if (command === 'retro') {
+    try {
+      const text = await retroReport({
+        cwd: typeof flags.cwd === 'string' ? flags.cwd : undefined,
+        session: typeof flags.session === 'string' ? flags.session : undefined,
+        demo: Boolean(flags.demo),
+        file: typeof flags.file === 'string' ? flags.file : undefined,
+      });
+      if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
+      else process.stdout.write(`${text}\n`);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      process.stderr.write(`treelog retro: ${(error && error.message) || error}\n`);
       return EXIT_CODES.usage;
     }
   }

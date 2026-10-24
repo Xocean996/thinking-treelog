@@ -34,6 +34,7 @@ import {
   analyzeConversation,
   decodeSession,
   formatPulse,
+  formatRetro,
   listWorkspaces,
   pickSession,
   scoreQuestion,
@@ -685,6 +686,37 @@ export async function pulseReport(options = {}) {
     .join(' ');
 
   return `${body}\n\n提问质量（最近 ${Math.min(8, scores.length)} 条，均值 ${average}）：\n  ${trend}`;
+}
+
+/**
+ * A closing report for the current session (or the demo), as Markdown.
+ *
+ * @param {{ demo?: boolean, file?: string, cwd?: string, session?: string, readFile?: Function }} [options]
+ */
+export async function retroReport(options = {}) {
+  const analysis = await (async () => {
+    if (options.demo) {
+      const { DEMO_RECORDS } = await import('@thinking-treelog/core/demo-session');
+      return analyzeConversation(DEMO_RECORDS);
+    }
+    if (options.file) {
+      const read = options.readFile || fsReadFile;
+      const raw = String(await read(options.file, 'utf8'));
+      return analyzeConversation(textToRecords(raw));
+    }
+    const workspaces = listWorkspaces(sessionsRoot());
+    if (!workspaces.length) {
+      throw new Error('no session logs — try `treelog retro --demo`');
+    }
+    const picked = pickSession(workspaces, {
+      cwd: options.cwd || process.cwd(),
+      sessionId: options.session,
+    });
+    if (!picked) throw new Error('no matching session — try `treelog retro --demo`');
+    return analyzeConversation(decodeSession(picked.session.file));
+  })();
+
+  return formatRetro(analysis);
 }
 
 /**

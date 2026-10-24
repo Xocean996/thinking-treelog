@@ -103,6 +103,43 @@ request asked three ways:
 Same intent. Only the third one tells you when it is done — and it scores 44 points
 higher. That number is the thing this tool is for.
 
+### Close the loop: `treelog retro`
+
+```bash
+treelog retro --demo
+```
+
+Writes a Markdown retrospective — the thing you would otherwise write by hand at the end of
+a session, or not at all:
+
+```markdown
+# 复盘 · 给结算服务加一次重试
+
+**6 次提问 · 13 次工具调用 · 历时 52 分钟 · 提问均值 53**
+
+## 完成情况
+- [x] 给回调加退避重试
+- [ ] 压测 1000 次验证零丢失
+- [ ] 补一条回归测试
+
+## 提问质量
+| # | 分数 | 提问 | 缺什么 |
+|---|---|---|---|
+| 2 | 76 | QPS 200 时丢 0.3%… | 没交代现状 |
+| 3 | 44 | 这个再优化一下 | 信息量偏少、没有验收标准 |
+| 5 | 32 | 顺手把死信队列… | 没有验收标准、塞了多个目标 |
+
+## 最该改写的一条
+> 顺手把死信队列也接了吧，还有监控面板、告警规则，一并加上
+
+## 下次注意
+- 一次只提一个目标——这轮有 1 条提问把多件事塞进了一句。
+- 每条提问带一行验收：做完时能跑通什么。
+```
+
+Paste it into the PR description, or into next week's plan. The unfinished boxes become the
+next session's todo list.
+
 ## How it differs
 
 | | Reads your real session | Reviews your questions | Names the next move | No server, no key |
