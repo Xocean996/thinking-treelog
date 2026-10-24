@@ -1403,16 +1403,16 @@ window.__ModuleLoader__.load({
       }
       .ttl-dock {
         pointer-events: auto;
-        display: inline-flex; align-items: center; gap: 7px;
-        padding: 4px 11px 4px 9px; border-radius: 999px; cursor: pointer;
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #f7f8fa) 42%, transparent);
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 9px 3px 8px; border-radius: 999px; cursor: pointer;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #f7f8fa) 34%, transparent);
         backdrop-filter: blur(14px) saturate(1.35);
         -webkit-backdrop-filter: blur(14px) saturate(1.35);
-        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 9%, transparent);
         box-shadow:
-          inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
-          0 4px 14px rgba(0, 0, 0, 0.16);
-        font-size: 11px; line-height: 1;
+          inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
+          0 3px 12px rgba(0, 0, 0, 0.14);
+        font-size: 10.5px; line-height: 1;
         color: var(--dsw-alias-label-secondary, #6b7280);
         transition: border-color .16s ease, box-shadow .16s ease, transform .12s ease;
       }
@@ -1530,6 +1530,9 @@ window.__ModuleLoader__.load({
       const latest = trees[0];
       const issues = useMemo(() => {
         if (!latest || !latest.nodes || !latest.nodes.length) return 0;
+        // A workspace tree is an analysis, not a reasoning chain: it has no
+        // findings, and linting it produced absurd counts (131).
+        if (latest.extractor === 'workspace') return 0;
         try {
           if (latest.extractor === 'plan') {
             return lintPlanClient(parsePlanClient(latest.source || '')).length;
@@ -1543,9 +1546,13 @@ window.__ModuleLoader__.load({
       if (!latest) return null;
 
       return h(
-        'div',
-        { className: 'ttl-dock-wrap' },
+        React.Fragment,
+        null,
+        h('style', { dangerouslySetInnerHTML: { __html: CSS } }),
         h(
+          'div',
+          { className: 'ttl-dock-wrap' },
+          h(
           'div',
           {
             className: 'ttl-dock',
@@ -1583,6 +1590,7 @@ window.__ModuleLoader__.load({
           h('span', { className: 'ttl-dock-count' }, `${latest.nodes.length}`),
           issues ? h('span', { className: 'ttl-dock-warn' }, `${issues} 问题`) : null,
           h('span', { className: 'ttl-dock-open' }, '→'),
+        ),
         ),
       );
     }
@@ -1881,8 +1889,8 @@ window.__ModuleLoader__.load({
                 key: link.id,
                 d: link.d,
                 fill: 'none',
-                stroke: onPath ? '#2f6feb' : withAlpha(linkColor, dim ? 0.12 : 0.42),
-                strokeWidth: onPath ? 2.2 : 1.2,
+                stroke: onPath ? '#2f6feb' : withAlpha(linkColor, dim ? 0.08 : 0.24),
+                strokeWidth: onPath ? 2 : 1,
                 strokeDasharray: dim ? '4 5' : undefined,
                 opacity: dim ? 0.4 : 0.95,
               });
@@ -1941,14 +1949,14 @@ window.__ModuleLoader__.load({
                 }),
                 h('rect', {
                   width: NODE_W, height: NODE_H, rx: 15,
-                  fill: withAlpha(meta.color, muted ? 0.05 : isRoot ? 0.26 : 0.17),
+                  fill: withAlpha(meta.color, muted ? 0.04 : isRoot ? 0.17 : 0.10),
                 }),
                 h('rect', {
                   width: NODE_W, height: NODE_H, rx: 15, fill: 'none',
                   stroke: rejected
                     ? '#e03131'
-                    : withAlpha(meta.color, selected ? 1 : muted ? 0.2 : isRoot ? 0.7 : 0.45),
-                  strokeWidth: selected ? 2 : isRoot ? 1.6 : 1.1,
+                    : withAlpha(meta.color, selected ? 1 : muted ? 0.16 : isRoot ? 0.6 : 0.32),
+                  strokeWidth: selected ? 2 : isRoot ? 1.5 : 1,
                   strokeDasharray: rejected ? '5 4' : undefined,
                 }),
                 // Type spine.
