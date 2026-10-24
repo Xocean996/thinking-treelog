@@ -270,7 +270,21 @@ window.__ModuleLoader__.load({
             cons: pick(item.review.cons),
             next: pick(item.review.next),
           };
+          if (Number.isFinite(Number(item.review.score))) {
+            extra.review.score = Number(item.review.score);
+          }
+          if (typeof item.review.rewrite === 'string' && item.review.rewrite.trim()) {
+            extra.review.rewrite = item.review.rewrite;
+          }
         }
+        // These carry the link back to the conversation. Dropping them here is
+        // what made double-click do nothing.
+        if (Number.isFinite(Number(item.seq))) extra.seq = Number(item.seq);
+        if (typeof item.messageText === 'string' && item.messageText.trim()) {
+          extra.messageText = item.messageText;
+        }
+        if (typeof item.skill === 'string' && item.skill.trim()) extra.skill = item.skill;
+        if (item.virtual === true) extra.virtual = true;
         if (Array.isArray(item.refs)) {
           const refs = item.refs
             .filter((r) => typeof r === 'string' && r.trim())
@@ -2030,7 +2044,9 @@ window.__ModuleLoader__.load({
                   },
                   onDoubleClick: (event) => {
                     event.stopPropagation();
-                    if (node.seq && onJumpToChat) {
+                    // Always go through the jump handler: it knows how to explain
+                    // a node that has no source message.
+                    if (onJumpToChat) {
                       onJumpToChat(node);
                       return;
                     }
@@ -2834,12 +2850,14 @@ window.__ModuleLoader__.load({
 
       const jumpToChat = (node) => {
         const text = node.messageText || node.text || '';
-        if (text) {
-          try {
-            navigator.clipboard.writeText(text);
-          } catch (err) {
-            /* ignore */
-          }
+        if (!text) {
+          setNotice('这个节点没有可跳转的对话消息');
+          return;
+        }
+        try {
+          navigator.clipboard.writeText(text);
+        } catch (err) {
+          /* ignore */
         }
         try {
           if (props && props.layout && typeof props.layout.selectPanel === 'function') {

@@ -14,6 +14,7 @@ import {
   suggestNext,
 } from '../packages/dsh-plugin/index.js';
 import { reviewQuestion, stageOf } from '../packages/core/src/workspace.js';
+import { normalizeNodes } from '../packages/core/src/index.js';
 
 const SAMPLE = [
   '这个再优化一下',
@@ -119,6 +120,31 @@ test('pulseToTree builds a rooted tree with skills and reviews', () => {
 
 test('sessionsRoot lives under the dsh home', () => {
   assert.match(sessionsRoot(), /\.dsh[\\/]sessions$/);
+});
+
+test('normalizeNodes preserves the link back to the conversation', () => {
+  // Dropping seq/messageText here is what made double-click do nothing.
+  const [node] = normalizeNodes([
+    {
+      id: 'a',
+      parentId: null,
+      label: 'x',
+      text: 'y',
+      type: 'claim',
+      seq: 9,
+      messageText: '原文',
+      skill: 'brainstorming',
+      virtual: true,
+      review: { pros: ['p'], cons: ['c'], next: ['n'], score: 62, rewrite: 'r' },
+    },
+  ]);
+
+  assert.equal(node.seq, 9);
+  assert.equal(node.messageText, '原文');
+  assert.equal(node.skill, 'brainstorming');
+  assert.equal(node.virtual, true);
+  assert.equal(node.review.score, 62);
+  assert.equal(node.review.rewrite, 'r');
 });
 
 test('listWorkspaces returns an array, never throws on a missing root', () => {

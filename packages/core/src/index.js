@@ -275,7 +275,20 @@ export function normalizeNodes(raw) {
         cons: pick(record.review.cons),
         next: pick(record.review.next),
       };
+      if (Number.isFinite(Number(record.review.score))) {
+        extra.review.score = Number(record.review.score);
+      }
+      if (typeof record.review.rewrite === 'string' && record.review.rewrite.trim()) {
+        extra.review.rewrite = record.review.rewrite;
+      }
     }
+    // The link back to the source conversation.
+    if (Number.isFinite(Number(record.seq))) extra.seq = Number(record.seq);
+    if (typeof record.messageText === 'string' && record.messageText.trim()) {
+      extra.messageText = record.messageText;
+    }
+    if (typeof record.skill === 'string' && record.skill.trim()) extra.skill = record.skill;
+    if (record.virtual === true) extra.virtual = true;
     if (Array.isArray(record.refs)) {
       const refs = record.refs
         .filter((r) => typeof r === 'string' && r.trim())
