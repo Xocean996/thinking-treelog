@@ -8,6 +8,7 @@
  */
 
 import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import { TOOLS, callTool } from './tools.mjs';
 
 const SERVER_INFO = { name: 'thinking-treelog', version: '0.1.0' };
@@ -72,28 +73,51 @@ async function handleRequest(message) {
   }
 }
 
-const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+/**
+ * Start the stdio loop.
+ *
+ * Exported rather than run at module scope: importing this package used to
+ * register stdin readers and process handlers as a side effect, which hangs any
+ * tool that merely wanted to inspect the exported server.
+ */
+export function start() {
+  const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
-rl.on('line', (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
 
-  let message;
-  try {
-    message = JSON.parse(trimmed);
-  } catch (error) {
-    sendError(null, -32700, `parse error: ${error.message}`);
-    return;
-  }
+    let message;
+    try {
+      message = JSON.parse(trimmed);
+    } catch (error) {
+      sendError(null, -32700, `parse error: ${error.message}`);
+      return;
+    }
 
-  handleRequest(message).catch((error) => {
-    sendError(message?.id ?? null, -32603, String(error?.message ?? error));
+    handleRequest(message).catch((error) => {
+      sendError(message?.id ?? null, -32603, String(error?.message ?? error));
+    });
   });
-});
 
-rl.on('close', () => process.exit(0));
+  rl.on('close', () => process.exit(0));
 
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
+  process.on('SIGTERM', () => process.exit(0));
+  process.on('SIGINT', () => process.exit(0));
 
-process.stderr.write('thinking-treelog MCP server ready on stdio\n');
+  process.stderr.write('thinking-treelog MCP server ready on stdio\n');
+
+  return rl;
+}
+
+const invokedDirectly = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) start();

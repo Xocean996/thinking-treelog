@@ -20,7 +20,9 @@ import { join } from 'node:path';
 
 const zstdDecompressAsync = promisify(zstdDecompress);
 
-const VERSION = '0.4.0';
+// Keep in step with package.json; /health reports it, and a mismatch makes every
+// bug report ambiguous about which build the user is running.
+const VERSION = '0.1.0';
 const PORT = Number(process.env.TTL_PORT) || 17866;
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;

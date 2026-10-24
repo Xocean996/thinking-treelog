@@ -15,6 +15,12 @@
     "./workspace": "./src/workspace.js"
   },
   "files": ["src"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "node --test test/"
   }
