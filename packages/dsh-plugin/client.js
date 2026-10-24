@@ -1325,14 +1325,25 @@ window.__ModuleLoader__.load({
         background: var(--ttl-art);
         -webkit-background-clip: text; background-clip: text; color: transparent;
       }
+      /* Pinned to the viewport, not to the panel: the host column is wider than
+         what is visible, so an in-flow rail lands off screen. */
       .ttl-detail {
-        width: 320px; flex: none;
-        border-left: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 46%, transparent);
-        backdrop-filter: blur(20px) saturate(1.3);
-        -webkit-backdrop-filter: blur(20px) saturate(1.3);
-        overflow: auto; padding: 12px;
+        position: fixed; right: 18px; bottom: 108px; width: 334px; max-height: 64vh; z-index: 60;
+        border-radius: 16px;
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 12%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 82%, transparent);
+        backdrop-filter: blur(24px) saturate(1.35);
+        -webkit-backdrop-filter: blur(24px) saturate(1.35);
+        box-shadow:
+          0 24px 60px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+        overflow: auto; padding: 14px;
         display: flex; flex-direction: column; gap: 10px;
+        animation: ttl-pop 0.18s ease-out;
+      }
+      @keyframes ttl-pop {
+        from { opacity: 0; transform: translateY(10px) scale(0.98); }
+        to { opacity: 1; transform: none; }
       }
       .ttl-detail .row { display: flex; gap: 6px; }
       .ttl-detail .row > * { flex: 1; min-width: 0; }
@@ -1882,7 +1893,9 @@ window.__ModuleLoader__.load({
         const ky = view.h / Math.max(1, box.height);
         const dx = (event.clientX - drag.sx) * kx;
         const dy = (event.clientY - drag.sy) * ky;
-        if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+        // 2px was tight enough that a shaky click counted as a pan and the node
+        // never got selected — which read as "clicking does nothing".
+        if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
         setView((prev) => ({ ...prev, x: drag.vx - dx, y: drag.vy - dy }));
       };
 
@@ -2133,7 +2146,7 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function NodeDetail(props) {
-      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview } = props;
+      const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview, onAddInnovation } = props;
       const [deep, setDeep] = useState('');
       const [deepBusy, setDeepBusy] = useState(false);
       const meta = TYPE_META[node.type] || TYPE_META.claim;
@@ -2221,6 +2234,14 @@ window.__ModuleLoader__.load({
           h('button', { className: 'ttl-btn', onClick: () => onAddChild(node.id) }, '＋ 子节点'),
           h('button', { className: 'ttl-btn', onClick: () => onBranch(node.id) }, '⑂ 分支实验'),
         ),
+
+        onAddInnovation
+          ? h('button', {
+              className: 'ttl-btn primary',
+              onClick: () => onAddInnovation(node.id),
+              title: '在这个节点下面挂一个创新想法',
+            }, '＋ 创新想法')
+          : null,
 
         node.review &&
         ((node.review.pros || []).length ||
@@ -2825,6 +2846,27 @@ window.__ModuleLoader__.load({
         });
       };
 
+      const addInnovation = (parentId) => {
+        const now = Date.now();
+        const child = {
+          id: uid('n'),
+          parentId,
+          label: '创新：新想法',
+          text: '把你的创新点写在这里，然后选中它加批注…',
+          type: 'conclusion',
+          confidence: 0.6,
+          branchId: (graph.nodeMap.get(parentId) || {}).branchId || DEFAULT_BRANCH,
+          createdAt: now,
+          tags: [],
+          virtual: true,
+          annotation: '',
+        };
+        patchCurrent({ nodes: [...nodes, child] });
+        setSelectedId(child.id);
+        setCutoff(nodes.length + 1);
+        setNotice('已添加创新节点，写下你的想法');
+      };
+
       const addChild = (parentId) => {
         const now = Date.now();
         const child = {
@@ -3221,6 +3263,7 @@ window.__ModuleLoader__.load({
                 onClose: () => setSelectedId(''),
                 onPublish: publishAnnotation,
                 onDeepReview: deepReview,
+                onAddInnovation: addInnovation,
               })
             : null,
         ),
