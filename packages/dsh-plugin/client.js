@@ -1351,7 +1351,7 @@ window.__ModuleLoader__.load({
       /* Pinned to the viewport, not to the panel: the host column is wider than
          what is visible, so an in-flow rail lands off screen. */
       .ttl-detail {
-        position: fixed; right: 18px; bottom: 108px; width: 334px; max-height: 64vh; z-index: 60;
+        position: fixed; right: 18px; bottom: 104px; width: 384px; max-height: 70vh; z-index: 60;
         border-radius: 16px;
         border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 12%, transparent);
         background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fafafa) 82%, transparent);
@@ -1495,6 +1495,16 @@ window.__ModuleLoader__.load({
       .ttl-review-row.cons .ttl-review-tag { color: #e8590c; }
       .ttl-review-row.next .ttl-review-tag { color: #2f6feb; }
       .ttl-rewrite { font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+      .ttl-actions {
+        display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px;
+        border-top: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #000) 8%, transparent);
+      }
+      .ttl-actions .ttl-btn { flex: 1 1 auto; justify-content: center; }
+      .ttl-deep-body { font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
+      .ttl-review-tag-note {
+        margin-left: 6px; font-size: 9px; font-weight: 400;
+        letter-spacing: 0; opacity: 0.6; text-transform: none;
+      }
       .ttl-score { margin-left: auto; font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
       .ttl-deep {
         padding: 9px 11px; border-radius: 11px; font-size: 11px; line-height: 1.6;
@@ -2169,12 +2179,63 @@ window.__ModuleLoader__.load({
      * Node detail
      * ------------------------------------------------------------------ */
 
+    /**
+     * The same review rules the Host applies, run in the panel.
+     *
+     * A tree saved before the Host grew reviews has no `review` on its nodes; this
+     * keeps the detail panel complete instead of silently dropping two sections.
+     */
+    function localReview(node) {
+      const value = `${node.label || ''} ${node.text || ''}`;
+      const pros = [];
+      const cons = [];
+
+      if (/\d+/.test(value)) pros.push('带了具体数字或规模');
+      if (/优先|取舍|权衡|tradeoff/i.test(value)) pros.push('有取舍意识，不是全都要');
+      if (/因为|所以|由于|因此/.test(value)) pros.push('给了理由，不只是下结论');
+      if (/不要|避免|别|除了/.test(value)) pros.push('划了边界，说明不做什么');
+      if (value.length >= 40) pros.push('描述足够完整，场景能还原');
+      if (!pros.length) pros.push('意图清楚，方向可辨');
+
+      if (value.length < 20) cons.push('信息量偏少，缺上下文');
+      if (!/(完成|验收|跑通|通过|输出|能用)/.test(value)) {
+        cons.push('没有验收标准，"做完"无法判断');
+      }
+      if (/同时|以及|还有|顺便/.test(value)) cons.push('塞了多个目标，容易只做一半');
+      if (!cons.length) cons.push('缺少明确的下一步指向');
+
+      const next =
+        node.type === 'conclusion'
+          ? ['把这条结论写成一句可验证的话', '标出它依赖哪个前提']
+          : ['写一句“完成时能跑通什么”', '拆成 30 分钟以内的一步'];
+
+      let score = 50;
+      if (/\d+/.test(value)) score += 10;
+      if (/(完成|验收|跑通|通过|输出|能用)/.test(value)) score += 14;
+      if (value.length >= 40) score += 8;
+      if (/同时|以及|还有|顺便/.test(value)) score -= 12;
+      score = Math.max(10, Math.min(98, score));
+
+      return {
+        pros,
+        cons,
+        next,
+        score,
+        rewrite: `「${truncate(value, 34)}」\n验收：完成时能跑通一个具体场景。\n约束：只改一处，其余保持不动。`,
+        local: true,
+      };
+    }
+
     function NodeDetail(props) {
       const { node, graph, onUpdate, onBranch, onAddChild, onDelete, onClose, onPublish, onDeepReview, onAddInnovation } = props;
       const [deep, setDeep] = useState('');
       const [deepBusy, setDeepBusy] = useState(false);
       const meta = TYPE_META[node.type] || TYPE_META.claim;
       const path = pathTo(graph, node.id);
+      // A tree saved before the Host grew reviews has no usable review on its
+      // nodes; `{}` would slip past `||`, so check for the score.
+      const review =
+        node.review && typeof node.review.score === 'number' ? node.review : localReview(node);
 
       return h(
         'aside',
@@ -2183,15 +2244,13 @@ window.__ModuleLoader__.load({
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { className: 'ttl-badge', style: { background: meta.color } }, meta.label),
-          node.review && typeof node.review.score === 'number'
-            ? h('span', {
-                className: 'ttl-score',
-                style: {
-                  color: node.review.score >= 70 ? '#37b24d' : node.review.score >= 45 ? '#e8590c' : '#e03131',
-                },
-                title: '这句提问的结构分：有没有数字、验收、理由、是否收敛',
-              }, `${node.review.score}`)
-            : null,
+          h('span', {
+            className: 'ttl-score',
+            style: {
+              color: review.score >= 70 ? '#37b24d' : review.score >= 45 ? '#e8590c' : '#e03131',
+            },
+            title: '结构分：有没有数字、验收、理由、是否收敛',
+          }, `${review.score}`),
           h('span', { className: 'ttl-hint' }, `置信度 ${Math.round(node.confidence * 100)}%`),
           h('span', { className: 'ttl-spacer', style: { flex: 1 } }),
           h('button', { className: 'ttl-btn ghost', onClick: onClose, title: '关闭' }, '✕'),
@@ -2254,61 +2313,43 @@ window.__ModuleLoader__.load({
               node.tags.map((tag) => h('span', { key: tag, className: 'ttl-chip' }, tag)))
           : null,
 
-        h('div', { className: 'row' },
-          h('button', { className: 'ttl-btn', onClick: () => onAddChild(node.id) }, '＋ 子节点'),
-          h('button', { className: 'ttl-btn', onClick: () => onBranch(node.id) }, '⑂ 分支实验'),
+        h('div', { className: 'ttl-chips' },
+          node.skill ? h('span', { className: 'ttl-chip' }, `技能 · ${node.skill}`) : null,
+          node.virtual ? h('span', { className: 'ttl-chip' }, '创新') : null,
         ),
 
-        onAddInnovation
-          ? h('button', {
-              className: 'ttl-btn primary',
-              onClick: () => onAddInnovation(node.id),
-              title: '在这个节点下面挂一个创新想法',
-            }, '＋ 创新想法')
-          : null,
+        h(
+          'div',
+          { className: 'ttl-review' },
+          h('div', { className: 'ttl-review-head' },
+            '节点评价',
+            review.local ? h('span', { className: 'ttl-review-tag-note' }, '面板本地估算') : null,
+          ),
+          h('div', { className: 'ttl-review-row pros' },
+            h('span', { className: 'ttl-review-tag' }, '优点'),
+            h('span', null, (review.pros || []).join('；') || '—'),
+          ),
+          h('div', { className: 'ttl-review-row cons' },
+            h('span', { className: 'ttl-review-tag' }, '不足'),
+            h('span', null, (review.cons || []).join('；') || '—'),
+          ),
+          h('div', { className: 'ttl-review-row next' },
+            h('span', { className: 'ttl-review-tag' }, '下一步'),
+            h('span', null, (review.next || []).join('；') || '—'),
+          ),
+        ),
 
-        node.review &&
-        ((node.review.pros || []).length ||
-          (node.review.cons || []).length ||
-          (node.review.next || []).length)
-          ? h(
-              'div',
-              { className: 'ttl-review' },
-              h('div', { className: 'ttl-review-head' }, '节点评价'),
-              (node.review.pros || []).length
-                ? h('div', { className: 'ttl-review-row pros' },
-                    h('span', { className: 'ttl-review-tag' }, '优点'),
-                    h('span', null, node.review.pros.join('；')),
-                  )
-                : null,
-              (node.review.cons || []).length
-                ? h('div', { className: 'ttl-review-row cons' },
-                    h('span', { className: 'ttl-review-tag' }, '不足'),
-                    h('span', null, node.review.cons.join('；')),
-                  )
-                : null,
-              (node.review.next || []).length
-                ? h('div', { className: 'ttl-review-row next' },
-                    h('span', { className: 'ttl-review-tag' }, '下一步'),
-                    h('span', null, node.review.next.join('；')),
-                  )
-                : null,
-            )
-          : null,
-
-        node.review && node.review.rewrite
-          ? h(
-              'div',
-              { className: 'ttl-review' },
-              h('div', { className: 'ttl-review-head' }, '改写建议'),
-              h('div', { className: 'ttl-rewrite' }, node.review.rewrite),
-            )
-          : null,
+        h(
+          'div',
+          { className: 'ttl-review' },
+          h('div', { className: 'ttl-review-head' }, '改写建议'),
+          h('div', { className: 'ttl-rewrite' }, review.rewrite || '—'),
+        ),
 
         h('label', { className: 'ttl-hint' }, '我的批注'),
         h('textarea', {
           className: 'ttl-textarea',
-          rows: 3,
+          rows: 2,
           value: node.annotation || '',
           placeholder: '给这个节点写一句批注…',
           onChange: (e) => onUpdate(node.id, { annotation: e.target.value }),
@@ -2318,7 +2359,7 @@ window.__ModuleLoader__.load({
             className: 'ttl-btn',
             disabled: !node.annotation,
             onClick: () => onPublish && onPublish(node.id),
-            title: '把批注复制到剪贴板，粘到输入框发送即可在当前工作区执行',
+            title: '把批注写进输入框（或复制到剪贴板）',
           }, '发布批注'),
           node.skill
             ? h('button', {
@@ -2331,7 +2372,7 @@ window.__ModuleLoader__.load({
                   }
                 },
                 title: `复制「Use ${node.skill}」`,
-              }, '复制技能')
+              }, node.skill)
             : null,
         ),
 
@@ -2350,20 +2391,36 @@ window.__ModuleLoader__.load({
               }
             },
             title: '用你在设置里配置的模型做一次内容评审',
-          }, deepBusy ? 'AI 评审中…' : 'AI 深评'),
+          }, deepBusy ? 'AI 评注中…' : 'AI 评注'),
+          deep ? h('button', { className: 'ttl-btn ghost', onClick: () => setDeep('') }, '清除') : null,
         ),
-        deep ? h('div', { className: 'ttl-deep' }, deep) : null,
+        deep
+          ? h(
+              'div',
+              { className: 'ttl-deep' },
+              h('div', { className: 'ttl-review-head' }, 'AI 评注'),
+              h('div', { className: 'ttl-deep-body' }, deep),
+            )
+          : null,
 
-        h('div', { className: 'row' },
+        h('div', { className: 'ttl-actions' },
+          h('button', { className: 'ttl-btn', onClick: () => onAddChild(node.id) }, '＋ 子节点'),
+          onAddInnovation
+            ? h('button', {
+                className: 'ttl-btn',
+                onClick: () => onAddInnovation(node.id),
+                title: '在这个节点下面挂一个创新想法',
+              }, '＋ 创新')
+            : null,
+          h('button', { className: 'ttl-btn', onClick: () => onBranch(node.id) }, '⑂ 分支'),
           h('button', {
-            className: 'ttl-btn',
-            style: { color: 'var(--dsw-alias-state-error-primary, #c92a2a)' },
+            className: 'ttl-btn danger',
             onClick: () => onDelete(node.id),
-          }, '删除节点'),
+          }, '删除'),
         ),
 
         h('div', { className: 'ttl-hint' },
-          '提示：双击画布节点可直接添加子节点；拖拽画布平移，滚轮缩放。'),
+          '双击节点可跳回对话里那条消息；拖拽平移，滚轮缩放。'),
       );
     }
 
