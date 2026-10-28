@@ -61,7 +61,7 @@ window.__ModuleLoader__.load({
     const TREES_KEY = 'ttl.trees.v1';
     // Bump on every change that must be visible in the UI. If the panel does not
     // show this marker, the browser is still running an older module.
-    const BUILD = 'r8';
+    const BUILD = 'r9';
     const BACKUP_KEY = 'ttl.trees.backup.v1';
     const SETTINGS_KEY = 'ttl.settings.v1';
     const APIKEY_SESSION_KEY = 'ttl.llm.key';
@@ -1561,6 +1561,15 @@ window.__ModuleLoader__.load({
         overflow: auto; max-height: 32vh;
         color: var(--dsw-alias-label-primary, #e8ebf2);
       }
+      .ttl-jumpdiag {
+        position: fixed; left: 50%; top: 84px; transform: translateX(-50%);
+        z-index: 95; padding: 10px 14px; border-radius: 12px;
+        font: 11px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace;
+        white-space: pre; color: #cfe0ff;
+        background: rgba(10, 14, 24, 0.94);
+        border: 1px solid color-mix(in srgb, #2f6feb 45%, transparent);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+      }
       .ttl-score { margin-left: auto; font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
       .ttl-deep {
         padding: 9px 11px; border-radius: 11px; font-size: 11px; line-height: 1.6;
@@ -2649,6 +2658,7 @@ window.__ModuleLoader__.load({
       const [sessionOptions, setSessionOptions] = useState([]);
       const [targetSession, setTargetSession] = useState('');
       const [sourceCard, setSourceCard] = useState(null);
+      const [jumpDiag, setJumpDiag] = useState('');
 
       const refreshSessions = useCallback(() => {
         fetch('http://127.0.0.1:17866/sessions', { cache: 'no-store' })
@@ -3069,25 +3079,38 @@ window.__ModuleLoader__.load({
        * nothing. `null` is the documented way back to the conversation.
        */
       const showConversation = () => {
+        const diag = {
+          hasLayout: false,
+          hasSelectPanel: false,
+          serviceError: '',
+          domMatch: '',
+          result: '',
+        };
+
         const layout = props && props.layout;
+        diag.hasLayout = Boolean(layout);
         if (layout && typeof layout.selectPanel === 'function') {
+          diag.hasSelectPanel = true;
           try {
             layout.selectPanel(null);
-            return 'service';
+            diag.result = 'service';
+            return diag;
           } catch (error) {
-            /* fall through to the DOM path */
+            diag.serviceError = String((error && error.message) || error);
           }
         }
 
-        // Belt and braces: if the service is missing or rejects, click the
-        // visible 对话 tab. Several dispatch types, because the tab may listen
-        // for pointer events rather than click.
+        // Fallback: click the visible 对话 tab. Match on trimmed text without
+        // requiring a leaf node — the tab may wrap its label in a <span>, and
+        // requiring `children.length === 0` skipped exactly that case.
         try {
-          const all = document.querySelectorAll('*');
+          const all = document.querySelectorAll('button, [role="tab"], [role="button"], a, span, div');
           for (const el of all) {
-            if (el.children.length > 0) continue;
-            if ((el.textContent || '').trim() !== '对话') continue;
+            const label = (el.textContent || '').trim();
+            if (label !== '对话') continue;
+            // Prefer the clickable ancestor.
             const target = el.closest('button, [role="tab"], [role="button"], a') || el;
+            diag.domMatch = `${target.tagName.toLowerCase()}${target.getAttribute('role') ? `[role=${target.getAttribute('role')}]` : ''}`;
             const view = typeof window !== 'undefined' ? window : null;
             for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
               try {
@@ -3096,13 +3119,29 @@ window.__ModuleLoader__.load({
                 /* ignore one event type */
               }
             }
-            return 'tab';
+            diag.result = 'tab';
+            return diag;
           }
         } catch (error) {
-          /* ignore */
+          diag.domMatch = `error: ${String((error && error.message) || error)}`;
         }
 
-        return '';
+        diag.domMatch = diag.domMatch || 'not-found';
+        return diag;
+      };
+
+      /** Put the jump result on the canvas so a failure is legible without devtools. */
+      const announceJump = (diag) => {
+        const lines = [
+          `双击已触发 · BUILD ${BUILD}`,
+          `props.layout: ${diag.hasLayout ? '有' : '没有'}`,
+          `selectPanel: ${diag.hasSelectPanel ? '有' : '没有'}`,
+          diag.serviceError ? `服务报错: ${diag.serviceError}` : '',
+          diag.domMatch ? `DOM 命中: ${diag.domMatch}` : '',
+          `结果: ${diag.result || '两条路都没成功'}`,
+        ].filter(Boolean);
+        setJumpDiag(lines.join('\n'));
+        setTimeout(() => setJumpDiag(''), 6000);
       };
 
       const jumpToChat = (node) => {
@@ -3119,7 +3158,17 @@ window.__ModuleLoader__.load({
           /* ignore */
         }
 
-        const switched = showConversation();
+        const diag = showConversation();
+
+        // Open the source card immediately. If the panel switch worked, this
+        // component unmounts and the card is never seen; if it did not, the click
+        // has still produced readable content.
+        if (!diag.result) {
+          setSourceCard({ text, reason: 'panel' });
+          announceJump(diag);
+          setError('没能自动切到对话面板，下面是这条节点的原文（可直接复制）');
+          return;
+        }
 
         // Try to scroll the matching message into view once the conversation
         // paints. Long conversations may be virtualised, so a miss is normal.
@@ -3158,22 +3207,14 @@ window.__ModuleLoader__.load({
             setNotice('已切到对话并定位到那条消息');
             return;
           }
-          if (attempt < 2) {
+          if (attempt < 1) {
             setTimeout(() => locate(attempt + 1), 500);
-            return;
-          }
-          if (!switched) {
-            // Both mechanisms failed: keep the panel and show the source text so
-            // the click still produces something you can act on.
-            setSourceCard({ text, reason: 'panel' });
-            setError('无法自动切到对话面板，已在下方显示这条原文（可复制后再切过去搜索）');
             return;
           }
           setNotice('已切到对话。这条消息不在当前渲染范围内，原文已复制，粘贴到搜索框即可定位');
         };
 
-        if (switched) setTimeout(() => locate(0), 320);
-        else locate(0);
+        setTimeout(() => locate(0), 320);
       };
 
       const publishAnnotation = async (id) => {
@@ -3692,10 +3733,15 @@ window.__ModuleLoader__.load({
             : null,
         ),
 
+        // Diagnostic banner: only appears after a double-click, so a failure is
+        // readable on screen instead of requiring devtools.
+        jumpDiag
+          ? h('div', { className: 'ttl-jumpdiag' }, jumpDiag)
+          : null,
+
         // Fallback card: shown only when switching panels failed, so the click
         // still yields the source text instead of nothing.
-        sourceCard
-          ? h(
+        sourceCard          ? h(
               'div',
               { className: 'ttl-sourcecard' },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
