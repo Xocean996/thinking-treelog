@@ -13,6 +13,8 @@ You talk to an AI for four hours. Somewhere in there the design got decided, a w
 turn got abandoned, and a question you asked badly cost you twenty minutes. Then you close
 the tab and all of it is gone — not the code, the *reasoning*.
 
+![treelog pulse --demo](docs/demo-pulse.png)
+
 Thinking TreeLog reads the transcript you already have and gives you:
 
 ```
@@ -594,10 +596,14 @@ reviewer sees "this decision has no evidence" on the PR that introduced it.
 
 ## Screenshots
 
-Not included. The panel runs inside a real workspace, and every screenshot of it
-shows the operator's session titles, working paths and conversation text — none of
-which belongs in a public repository. Run `treelog pulse --demo` or `treelog weekly`
-to see the command-line output, which is the same analysis without anyone's data.
+The panel is not shown. It runs inside a real workspace, and every capture of it
+carries the operator's session titles, working paths and conversation text — none of
+which belongs in a public repository. The command-line surfaces produce the same
+analysis without anyone's data, so those are what this README shows.
+
+The image above is generated from live output, not hand-typed:
+`scripts/render-demo.py` reads `treelog pulse --demo` and draws the card, so it cannot
+drift from what the tool actually prints.
 
 Paste a discussion, get a typed tree: node cards carry the type colour as a spine and a
 wash, links inherit the child's type, and the reasoning lint runs on the result.

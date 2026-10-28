@@ -31,3 +31,6 @@ junit.xml
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Render input for docs/demo-pulse.png
+docs/.demo-output.txt
