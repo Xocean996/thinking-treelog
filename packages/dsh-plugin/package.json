@@ -29,5 +29,13 @@
             },
     "publishConfig":  {
                           "access":  "public"
-                      }
+                      },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/Xocean996/thinking-treelog.git"
+                   },
+    "homepage":  "https://github.com/Xocean996/thinking-treelog#readme",
+    "bugs":  {
+                 "url":  "https://github.com/Xocean996/thinking-treelog/issues"
+             }
 }

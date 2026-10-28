@@ -1,33 +1,37 @@
 {
-  "name": "thinking-treelog",
-  "version": "0.2.0",
-  "private": true,
-  "type": "module",
-  "description": "Turn any conversation into a navigable, branchable thought tree — as a dsh plugin, an MCP server, a CI lint, and a reusable engine.",
-  "license": "MIT",
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "test": "npm run test:core && npm run test:engineering && npm run test:plan && npm run test:trace && npm run test:consistency && npm run test:client && npm run test:mcp",
-    "test:core": "node packages/core/test/core.test.js",
-    "test:engineering": "node scripts/engineering.test.mjs",
-    "test:plan": "node scripts/plan.test.mjs",
-    "test:project": "node scripts/project-import.test.mjs",
-    "test:host": "node scripts/host.test.mjs",
-    "test:contract": "node scripts/api-contract.test.mjs",
-    "test:rhythm": "node scripts/rhythm.test.mjs",
-    "test:weekly": "node scripts/weekly.test.mjs",
-    "test:workspace": "node scripts/workspace.test.mjs",
-    "test:trace": "node scripts/trace.test.mjs",
-    "test:consistency": "node scripts/consistency.test.mjs",
-    "test:client": "node scripts/smoke-client.mjs",
-    "test:mcp": "node scripts/mcp.test.mjs",
-    "verify": "npm run test:core && npm run test:engineering && npm run test:plan && npm run test:project && npm run test:host && npm run test:contract && npm run test:rhythm && npm run test:weekly && npm run test:workspace && npm run test:trace && npm run test:consistency && npm run test:client && npm run test:mcp",
-    "treelog": "node packages/cli/bin/treelog.mjs",
-    "lint:docs": "node packages/cli/bin/treelog.mjs lint examples/*.md"
-  },
-  "engines": {
-    "node": ">=18"
-  }
+    "name":  "thinking-treelog",
+    "version":  "0.2.0",
+    "private":  true,
+    "type":  "module",
+    "description":  "Turn any conversation into a navigable, branchable thought tree — as a dsh plugin, an MCP server, a CI lint, and a reusable engine.",
+    "license":  "MIT",
+    "workspaces":  [
+                       "packages/*"
+                   ],
+    "scripts":  {
+                    "test":  "npm run test:core \u0026\u0026 npm run test:engineering \u0026\u0026 npm run test:plan \u0026\u0026 npm run test:trace \u0026\u0026 npm run test:consistency \u0026\u0026 npm run test:client \u0026\u0026 npm run test:mcp",
+                    "test:core":  "node packages/core/test/core.test.js",
+                    "test:engineering":  "node scripts/engineering.test.mjs",
+                    "test:plan":  "node scripts/plan.test.mjs",
+                    "test:project":  "node scripts/project-import.test.mjs",
+                    "test:host":  "node scripts/host.test.mjs",
+                    "test:contract":  "node scripts/api-contract.test.mjs",
+                    "test:rhythm":  "node scripts/rhythm.test.mjs",
+                    "test:weekly":  "node scripts/weekly.test.mjs",
+                    "test:workspace":  "node scripts/workspace.test.mjs",
+                    "test:trace":  "node scripts/trace.test.mjs",
+                    "test:consistency":  "node scripts/consistency.test.mjs",
+                    "test:client":  "node scripts/smoke-client.mjs",
+                    "test:mcp":  "node scripts/mcp.test.mjs",
+                    "verify":  "npm run test:core \u0026\u0026 npm run test:engineering \u0026\u0026 npm run test:plan \u0026\u0026 npm run test:project \u0026\u0026 npm run test:host \u0026\u0026 npm run test:contract \u0026\u0026 npm run test:rhythm \u0026\u0026 npm run test:weekly \u0026\u0026 npm run test:workspace \u0026\u0026 npm run test:trace \u0026\u0026 npm run test:consistency \u0026\u0026 npm run test:client \u0026\u0026 npm run test:mcp",
+                    "treelog":  "node packages/cli/bin/treelog.mjs",
+                    "lint:docs":  "node packages/cli/bin/treelog.mjs lint examples/*.md"
+                },
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/Xocean996/thinking-treelog.git"
+                   }
 }

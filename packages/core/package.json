@@ -1,27 +1,46 @@
 {
-  "name": "@thinking-treelog/core",
-  "version": "0.1.0",
-  "description": "Extraction, normalisation, layout and rendering helpers for Thinking TreeLog thought trees.",
-  "type": "module",
-  "license": "MIT",
-  "keywords": ["thought-tree", "reasoning", "ai", "mcp", "visualization", "lint", "sarif", "adr"],
-  "exports": {
-    ".": "./src/index.js",
-    "./engineering": "./src/engineering.js",
-    "./plan": "./src/plan.js",
-    "./rhythm": "./src/rhythm.js",
-    "./demo-session": "./src/demo-session.js",
-    "./trace": "./src/trace.js",
-    "./workspace": "./src/workspace.js"
-  },
-  "files": ["src"],
-  "publishConfig": {
-    "access": "public"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "scripts": {
-    "test": "node --test test/"
-  }
+    "name":  "@thinking-treelog/core",
+    "version":  "0.1.0",
+    "description":  "Extraction, normalisation, layout and rendering helpers for Thinking TreeLog thought trees.",
+    "type":  "module",
+    "license":  "MIT",
+    "keywords":  [
+                     "thought-tree",
+                     "reasoning",
+                     "ai",
+                     "mcp",
+                     "visualization",
+                     "lint",
+                     "sarif",
+                     "adr"
+                 ],
+    "exports":  {
+                    ".":  "./src/index.js",
+                    "./engineering":  "./src/engineering.js",
+                    "./plan":  "./src/plan.js",
+                    "./rhythm":  "./src/rhythm.js",
+                    "./demo-session":  "./src/demo-session.js",
+                    "./trace":  "./src/trace.js",
+                    "./workspace":  "./src/workspace.js"
+                },
+    "files":  [
+                  "src"
+              ],
+    "publishConfig":  {
+                          "access":  "public"
+                      },
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "scripts":  {
+                    "test":  "node --test test/"
+                },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/Xocean996/thinking-treelog.git"
+                   },
+    "homepage":  "https://github.com/Xocean996/thinking-treelog#readme",
+    "bugs":  {
+                 "url":  "https://github.com/Xocean996/thinking-treelog/issues"
+             }
 }

@@ -12,9 +12,31 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { zstdDecompressSync } from 'node:zlib';
+// Namespace import, not `{ zstdDecompressSync }`: that named export only exists
+// in Node 22.15+, and a named import of a missing export fails at module load —
+// which took the whole CLI down on Node 18/20 even for commands that never touch
+// a session log. Reading it lazily keeps every other command working.
+import * as zlib from 'node:zlib';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+/** @returns {typeof zlib.zstdDecompressSync} */
+function zstdDecompressSync() {
+  const fn = zlib.zstdDecompressSync;
+  if (typeof fn !== 'function') {
+    throw new Error(
+      'reading dsh session logs needs Node 22.15 or newer (zlib zstd support). ' +
+        `This is Node ${process.version}. Other treelog commands work here; ` +
+        'upgrade Node, or use `treelog pulse --file <transcript.txt>`.',
+    );
+  }
+  return fn;
+}
+
+/** True when this Node can decode the session log format. */
+export function canReadSessionLogs() {
+  return typeof zlib.zstdDecompressSync === 'function';
+}
 
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 const DAY_MS = 86400000;
@@ -73,7 +95,7 @@ export function decodeSession(file, options = {}) {
   for (const i of [...wanted].sort((a, b) => a - b)) {
     const end = i + 1 < offsets.length ? offsets[i + 1] : buf.length;
     try {
-      const text = zstdDecompressSync(buf.subarray(offsets[i], end)).toString('utf8');
+      const text = zstdDecompressSync()(buf.subarray(offsets[i], end)).toString('utf8');
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
         try {

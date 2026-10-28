@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { zstdCompressSync } from 'node:zlib';
+import * as zlib from 'node:zlib';
 
 import {
   analyzeConversation,
@@ -18,7 +18,23 @@ import {
   threadOf,
 } from '../packages/core/src/workspace.js';
 
-const frame = (record) => zstdCompressSync(Buffer.from(`${JSON.stringify(record)}\n`));
+/**
+ * Session logs are zstd-compressed and Node only learned zstd in 22.15. On older
+ * runtimes every test here would fail for a reason unrelated to this package, so
+ * the suite reports one skip instead of a wall of red — the claim in engines and
+ * the README is that everything except `pulse` works on Node 18+.
+ */
+const hasZstd = typeof zlib.zstdCompressSync === 'function' && typeof zlib.zstdDecompressSync === 'function';
+
+/** Runs the test normally, or records one honest skip when zstd is unavailable. */
+const sessionTest = (name, fn) =>
+  hasZstd ? test(name, fn) : test(name, { skip: 'needs Node 22.15+' }, () => {});
+
+if (!hasZstd) {
+  test('session log tests need Node 22.15+ (zlib zstd)', { skip: true }, () => {});
+}
+
+const frame = (record) => zlib.zstdCompressSync(Buffer.from(`${JSON.stringify(record)}\n`));
 
 function makeSessionFile(records) {
   const dir = mkdtempSync(join(tmpdir(), 'ttl-session-'));
@@ -72,7 +88,7 @@ const RECORDS = [
   { type: 'turn/start', seq: 5, time: Date.now() - 3450000, data: { turn: 3 } },
 ];
 
-test('decodeSession splits on zstd frame magic and recovers every record', () => {
+sessionTest('decodeSession splits on zstd frame magic and recovers every record', () => {
   const file = makeSessionFile(RECORDS);
   const records = decodeSession(file, { maxFrames: 100, headFrames: 3 });
 
@@ -81,7 +97,7 @@ test('decodeSession splits on zstd frame magic and recovers every record', () =>
   assert.ok(records.some((r) => r.type === 'todo/write'));
 });
 
-test('analyzeConversation extracts title, messages, tools, todos and turns', () => {
+sessionTest('analyzeConversation extracts title, messages, tools, todos and turns', () => {
   const file = makeSessionFile(RECORDS);
   const analysis = analyzeConversation(decodeSession(file));
 
@@ -96,14 +112,14 @@ test('analyzeConversation extracts title, messages, tools, todos and turns', () 
   assert.match(analysis.userMessages[0].text, /看看这个插件的结构/);
 });
 
-test('threadOf renders the recent questions', () => {
+sessionTest('threadOf renders the recent questions', () => {
   const analysis = analyzeConversation(decodeSession(makeSessionFile(RECORDS)));
   const thread = threadOf(analysis);
   assert.equal(thread.length, 1);
   assert.match(thread[0].summary, /插件的结构/);
 });
 
-test('suggestNext names an unfinished todo first', () => {
+sessionTest('suggestNext names an unfinished todo first', () => {
   const analysis = analyzeConversation(decodeSession(makeSessionFile(RECORDS)));
   const suggestions = suggestNext(analysis, { now: Date.now() });
 
@@ -112,7 +128,7 @@ test('suggestNext names an unfinished todo first', () => {
   assert.ok(suggestions.some((s) => s.kind === 'treelog'));
 });
 
-test('suggestNext asks for a plan when there are turns but no todos', () => {
+sessionTest('suggestNext asks for a plan when there are turns but no todos', () => {
   const analysis = {
     turns: 5,
     todos: [],
@@ -124,7 +140,7 @@ test('suggestNext asks for a plan when there are turns but no todos', () => {
   assert.ok(suggestions.some((s) => s.move === 'writing-plans'));
 });
 
-test('suggestNext flags a long idle gap', () => {
+sessionTest('suggestNext flags a long idle gap', () => {
   const analysis = {
     turns: 3,
     todos: [],
@@ -136,7 +152,7 @@ test('suggestNext flags a long idle gap', () => {
   assert.ok(suggestions.some((s) => /停了 6 天/.test(s.title)));
 });
 
-test('formatPulse assembles the report', () => {
+sessionTest('formatPulse assembles the report', () => {
   const analysis = analyzeConversation(decodeSession(makeSessionFile(RECORDS)));
   const text = formatPulse(analysis, suggestNext(analysis, { now: Date.now() }), {
     thread: threadOf(analysis),
@@ -150,7 +166,7 @@ test('formatPulse assembles the report', () => {
   assert.match(text, /［treelog］/);
 });
 
-test('pickSession matches a workspace by cwd', () => {
+sessionTest('pickSession matches a workspace by cwd', () => {
   const file = makeSessionFile(RECORDS);
   const workspaces = [
     { workspace: 'other', sessions: [{ id: 'x', file: '/nope', mtime: 2, size: 1 }], mtime: 2 },
@@ -161,7 +177,7 @@ test('pickSession matches a workspace by cwd', () => {
   assert.equal(picked.session.id, 'session-test');
 });
 
-test('pickSession falls back to the newest workspace', () => {
+sessionTest('pickSession falls back to the newest workspace', () => {
   const workspaces = [
     { workspace: 'newest', sessions: [{ id: 'a', file: '/nope', mtime: 9, size: 1 }], mtime: 9 },
     { workspace: 'older', sessions: [{ id: 'b', file: '/nope', mtime: 1, size: 1 }], mtime: 1 },
@@ -170,7 +186,7 @@ test('pickSession falls back to the newest workspace', () => {
   assert.equal(picked.workspace, 'newest');
 });
 
-test('scoreQuestion rewards acceptance lines and punishes stacked goals', () => {
+sessionTest('scoreQuestion rewards acceptance lines and punishes stacked goals', () => {
   const vague = scoreQuestion('这个再优化一下');
   const stacked = scoreQuestion('顺手把注册、找回密码、手机绑定也做一下吧，还有监控');
   const precise = scoreQuestion(
@@ -182,7 +198,7 @@ test('scoreQuestion rewards acceptance lines and punishes stacked goals', () => 
   assert.ok(vague < 50);
 });
 
-test('stageOf maps questions to work stages', () => {
+sessionTest('stageOf maps questions to work stages', () => {
   assert.equal(stageOf('报错了，走不通'), 'debug');
   assert.equal(stageOf('跑一下测试验证'), 'verify');
   assert.equal(stageOf('出个计划拆成任务'), 'plan');
@@ -191,7 +207,7 @@ test('stageOf maps questions to work stages', () => {
   assert.equal(stageOf('我想做个新东西'), 'design');
 });
 
-test('reviewQuestion names what is missing and offers a rewrite', () => {
+sessionTest('reviewQuestion names what is missing and offers a rewrite', () => {
   const review = reviewQuestion('这个再优化一下');
   assert.ok(review.cons.some((item) => item.includes('验收标准')));
   assert.ok(review.cons.some((item) => item.includes('信息量')));
@@ -199,7 +215,7 @@ test('reviewQuestion names what is missing and offers a rewrite', () => {
   assert.match(review.rewrite, /约束：/);
 });
 
-test('formatRetro writes a pasteable Markdown retro', () => {
+sessionTest('formatRetro writes a pasteable Markdown retro', () => {
   const analysis = analyzeConversation(decodeSession(makeSessionFile(RECORDS)));
   const text = formatRetro(analysis, { now: Date.UTC(2026, 9, 24, 12) });
 

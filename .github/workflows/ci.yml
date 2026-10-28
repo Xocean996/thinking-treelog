@@ -6,35 +6,37 @@ on:
   pull_request:
 
 jobs:
+  # Node 18/20 can run every command except `pulse`, which needs zlib zstd
+  # (Node 22.15+). This job proves the engines claim in package.json is honest:
+  # the CLI must load and work there, not fail at import time.
+  minimum-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - name: CLI loads on an older Node
+        run: node packages/cli/bin/treelog.mjs --version
+      - name: Commands that do not read session logs still work
+        run: |
+          node packages/cli/bin/treelog.mjs weekly . --days 30 > /dev/null
+          node packages/cli/bin/treelog.mjs lint examples/adr-0007-plugin-vs-site.md --fail-on never
+          node packages/cli/bin/treelog.mjs pulse --file README.md --format json > /dev/null
+      - name: Session-log tests skip instead of failing
+        run: npm run test:workspace
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [20, 22]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-
-      - name: Link workspace packages
-        run: npm install --no-audit --no-fund
-
-      - name: Core engine tests
-        run: npm run test:core
-
-      - name: Engineering tests (markdown, lint, SARIF, config, baseline)
-        run: npm run test:engineering
-
-      - name: Plan interface lint
-        run: npm run test:plan
-
-      - name: Client half smoke test
-        run: npm run test:client
-
-      - name: Client ⇄ core parity
-        run: npm run test:consistency
-
-      - name: MCP tools
-        run: npm run test:mcp
+      - run: npm install --no-audit --no-fund
+      - name: Full suite
+        run: npm run verify

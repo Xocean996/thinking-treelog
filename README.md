@@ -571,6 +571,20 @@ plan rules and reports interface drift with line numbers (see the CLI output bel
 
 ## Install
 
+### Requirements
+
+| Command | Node |
+|---|---|
+| `weekly`, `rhythm`, `lint`, `plan`, `trace`, `tree`, `export`, `diff` | **18 or newer** |
+| `pulse` (reads dsh session logs) | **22.15 or newer** — it needs zlib zstd |
+| `retro` | 18, unless you point it at a live session |
+
+On an older Node everything except `pulse` still loads and runs; `pulse` prints a
+version message instead of a stack trace. If you only want to analyse a transcript
+you exported yourself, `pulse --file notes.txt` works on Node 18.
+
+Nothing needs an API key, a server, or a network connection.
+
 ### 1. As a dsh plugin
 
 The bundle is a normal dsh profile bundle. From a checkout of this repo:
