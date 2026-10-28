@@ -381,10 +381,41 @@ export function formatRhythm(analysis, context = {}) {
  * @param {string} dir
  * @param {{ days?: number, now?: number, commits?: any[], fileMap?: Map<string, any> }} [options]
  */
+/**
+ * The most recent tag and when it was cut.
+ *
+ * Teams report per release, not per calendar week: "since v1.2.0" is the range a
+ * reviewer recognises.
+ *
+ * @param {string} dir
+ * @returns {{tag: string, timestamp: number} | null}
+ */
+export function readLastTag(dir) {
+  const run = (args) =>
+    execFileSync('git', ['-C', dir, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 6000,
+    }).trim();
+  try {
+    const tag = run(['describe', '--tags', '--abbrev=0']);
+    if (!tag) return null;
+    const stamp = Number(run(['log', '-1', '--format=%at', tag]));
+    if (!Number.isFinite(stamp) || stamp <= 0) return null;
+    return { tag, timestamp: stamp * 1000 };
+  } catch {
+    return null;
+  }
+}
+
 export function weeklyFacts(dir, options = {}) {
   const days = options.days ?? 7;
   const now = options.now ?? Date.now();
-  const since = now - days * DAY_MS;
+
+  // Opt-in: `--since-last-tag`. Defaulting to the tag would silently change what
+  // "weekly" means for every repository that has any tag.
+  const tag = options.sinceTag ? readLastTag(dir) : null;
+  const since = tag ? tag.timestamp : now - days * DAY_MS;
 
   const allCommits = options.commits ?? readGitLog(dir, 400);
   const fileMap = options.fileMap ?? readCommitFiles(dir, 400);
@@ -445,6 +476,7 @@ export function weeklyFacts(dir, options = {}) {
     days,
     since,
     now,
+    tag: tag ? tag.tag : '',
     commits,
     commitCount: commits.length,
     themes,
@@ -485,7 +517,14 @@ export function formatWeekly(facts, options = {}) {
 
   lines.push(zh ? `# 周报 · ${project}` : `# Weekly · ${project}`);
   lines.push('');
-  lines.push(zh ? `周期：${range}（近 ${facts.days} 天）` : `Range: ${range} (last ${facts.days} days)`);
+  const scope = facts.tag
+    ? zh
+      ? `自 ${facts.tag}`
+      : `since ${facts.tag}`
+    : zh
+      ? `近 ${facts.days} 天`
+      : `last ${facts.days} days`;
+  lines.push(zh ? `周期：${range}（${scope}）` : `Range: ${range} (${scope})`);
   lines.push('');
 
   if (!facts.commitCount) {

@@ -14,6 +14,7 @@ import {
   EXIT_CODES,
   baselineDocument,
   diffPaths,
+  dailyReport,
   exportTree,
   lintPaths,
   lintPlanFile,
@@ -41,6 +42,7 @@ Usage:
   treelog trace <spec> <plan>           Check every spec decision has a task
   treelog rhythm [dir]                  Read the project's pace from git history
   treelog weekly [dir] [--days N]       Weekly report: delivered, risky, next step
+  treelog daily [dir]                   Today only: what moved, what you asked
   treelog pulse [--demo|--file <t>]       Read the current session: what you were doing
   treelog retro [--demo|--file <t>]       Write a Markdown retro you can paste into a PR
   treelog tree <file>                   Print the thought tree as ASCII
@@ -282,15 +284,40 @@ async function main() {
     }
   }
 
-  if (command === 'weekly') {
+  if (command === 'daily') {
     const dir = files[0] || process.cwd();
     try {
-      const text = await weeklyReport(dir, {
-        days: flags.days ? Number(flags.days) : undefined,
-        format: typeof flags.format === 'string' ? flags.format : 'text',
+      const text = await dailyReport(dir, {
         locale: typeof flags.lang === 'string' ? flags.lang : 'zh',
         name: typeof flags.name === 'string' ? flags.name : undefined,
       });
+      if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
+      else process.stdout.write(`${text}\n`);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      process.stderr.write(`treelog daily: ${(error && error.message) || error}\n`);
+      return EXIT_CODES.usage;
+    }
+  }
+
+  if (command === 'weekly') {
+    // Several directories produce one report per repository, separated by a rule.
+    // An intern usually owns more than one repo and has to report on all of them.
+    const targets = files.length ? files : [process.cwd()];
+    try {
+      const parts = [];
+      for (const dir of targets) {
+        parts.push(
+          await weeklyReport(dir, {
+            days: flags.days ? Number(flags.days) : undefined,
+            format: typeof flags.format === 'string' ? flags.format : 'text',
+            locale: typeof flags.lang === 'string' ? flags.lang : 'zh',
+            name: typeof flags.name === 'string' ? flags.name : undefined,
+            sinceTag: Boolean(flags['since-last-tag']),
+          }),
+        );
+      }
+      const text = parts.join('\n\n');
       if (flags.out) await writeFile(flags.out, `${text}\n`, 'utf8');
       else process.stdout.write(`${text}\n`);
       return EXIT_CODES.ok;

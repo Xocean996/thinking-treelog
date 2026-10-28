@@ -19,7 +19,7 @@ import {
   toAdr,
 } from '@thinking-treelog/core/engineering';
 import { lintPlan, parsePlan } from '@thinking-treelog/core/plan';
-import { analyzeRhythm, formatRhythm } from '@thinking-treelog/core/rhythm';
+import { analyzeRhythm, formatRhythm, formatWeekly, weeklyFacts } from '@thinking-treelog/core/rhythm';
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 import {
   analyzeConversation,
@@ -187,6 +187,38 @@ export const TOOLS = [
         limit: {
           type: 'number',
           description: 'How many historical events to read (default 60).',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'weekly_report',
+    description:
+      'Write a weekly status report from git history: what shipped, where the effort went, which ' +
+      'commits changed source without touching tests, whether the pattern is healthy (late nights, ' +
+      'rework), and exactly one next action. Returns paste-ready Markdown. Use when the user asks ' +
+      'for a weekly report, a standup summary, or "what did I do this week". Numbers are computed; ' +
+      'the judgement stays with the caller.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Repository directory. Defaults to the server working directory.',
+        },
+        days: {
+          type: 'number',
+          description: 'Window length in days (default 7).',
+        },
+        name: {
+          type: 'string',
+          description: 'Project name shown in the heading. Defaults to the directory name.',
+        },
+        locale: {
+          type: 'string',
+          enum: ['zh', 'en'],
+          description: 'Report language (default zh).',
         },
       },
       additionalProperties: false,
@@ -372,6 +404,19 @@ export async function callTool(name, args = {}) {
       const limit = Number.isFinite(Number(args?.limit)) ? Number(args.limit) : 60;
       const analysis = analyzeRhythm(dir, { limit });
       return textResult(formatRhythm(analysis, { locale: 'zh' }));
+    }
+
+    case 'weekly_report': {
+      const dir = typeof args?.path === 'string' && args.path.trim() ? args.path : process.cwd();
+      const days = Number.isFinite(Number(args?.days)) ? Number(args.days) : 7;
+      const locale = args?.locale === 'en' ? 'en' : 'zh';
+      const facts = weeklyFacts(dir, { days });
+      return textResult(
+        formatWeekly(facts, {
+          locale,
+          name: typeof args?.name === 'string' && args.name.trim() ? args.name : undefined,
+        }),
+      );
     }
 
     case 'workspace_pulse': {

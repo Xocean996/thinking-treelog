@@ -32,6 +32,7 @@ import { analyzeRhythm, formatRhythm, formatWeekly, rhythmToTree, weeklyFacts } 
 import { formatTrace, traceCoverage } from '@thinking-treelog/core/trace';
 import {
   analyzeConversation,
+  canReadSessionLogs,
   decodeSession,
   formatPulse,
   formatRetro,
@@ -598,13 +599,17 @@ export async function rhythmReport(dir, options = {}) {
  * @param {{ days?: number, now?: number, locale?: string, format?: string, name?: string }} [options]
  */
 export async function weeklyReport(dir, options = {}) {
-  const facts = weeklyFacts(dir, { days: options.days, now: options.now });
-
+  const facts = weeklyFacts(dir, {
+    days: options.days,
+    now: options.now,
+    sinceTag: options.sinceTag,
+  });
   if (options.format === 'json') {
     return JSON.stringify(
       {
         project: facts.dir,
         days: facts.days,
+        tag: facts.tag || null,
         commits: facts.commitCount,
         activeDays: facts.activeDays.length,
         added: facts.totalAdded,
@@ -620,6 +625,57 @@ export async function weeklyReport(dir, options = {}) {
   }
 
   return formatWeekly(facts, { locale: options.locale, name: options.name });
+}
+
+/**
+ * One day, not one week and not one session.
+ *
+ * `retro` covers a whole session and `weekly` covers seven days; the standup
+ * question sits between them — what moved today, and what did I actually ask.
+ *
+ * @param {string} dir
+ * @param {{ now?: number, locale?: string, name?: string, session?: any }} [options]
+ */
+export async function dailyReport(dir, options = {}) {
+  const now = options.now ?? Date.now();
+  const gitPart = (
+    await weeklyReport(dir, {
+      days: 1,
+      now,
+      locale: options.locale,
+      name: options.name,
+    })
+  )
+    // Same computation, different promise: this is today, not the week.
+    .replace(/^# 周报 · /, '# 日报 · ')
+    .replace(/^# Weekly · /, '# Daily · ');
+
+  // Today's questions, when a session log is readable on this Node.
+  let asked = [];
+  try {
+    if (canReadSessionLogs()) {
+      const { records } = await resolveSessionRecords({ cwd: dir });
+      const analysis = analyzeConversation(records);
+      const midnight = new Date(now);
+      midnight.setHours(0, 0, 0, 0);
+      asked = analysis.userMessages.filter((m) => (m.time || 0) >= midnight.getTime());
+    }
+  } catch {
+    asked = [];
+  }
+
+  if (!asked.length) return gitPart;
+
+  const zh = options.locale !== 'en';
+  const lines = [gitPart, ''];
+  lines.push(zh ? `## 今天问了什么（${asked.length}）` : `## Asked today (${asked.length})`);
+  lines.push('');
+  asked.forEach((message, index) => {
+    const text = String(message.text || '').replace(/\s+/g, ' ').trim();
+    lines.push(`${index + 1}. ${text.length > 64 ? `${text.slice(0, 64)}…` : text}`);
+  });
+
+  return lines.join('\n');
 }
 
 /**

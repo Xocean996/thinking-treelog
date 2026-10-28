@@ -21,7 +21,7 @@ function firstText(result) {
   return result.content[0].text;
 }
 
-test('tool catalogue exposes the ten documented tools', () => {
+test('tool catalogue exposes the eleven documented tools', () => {
   const names = TOOLS.map((t) => t.name).sort();
   assert.deepEqual(names, [
     'build_thought_tree',
@@ -33,6 +33,7 @@ test('tool catalogue exposes the ten documented tools', () => {
     'thought_tree_mermaid',
     'thought_tree_stats',
     'trace_coverage',
+    'weekly_report',
     'workspace_pulse',
   ]);
   for (const tool of TOOLS) {

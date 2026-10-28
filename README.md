@@ -149,6 +149,24 @@ Three things it does that a `git log --oneline` cannot:
 
 Every number is computed; the judgement is left to you, and the footer says so.
 
+Two refinements matter in practice:
+
+```bash
+treelog weekly . --since-last-tag     # report per release, not per calendar week
+treelog weekly repo-a repo-b repo-c   # one report per repo, in one command
+treelog daily .                       # today only: what moved, what you asked
+```
+
+`--since-last-tag` falls back to the day window when the repository has no tag, so
+it is safe to leave in a script. `daily` answers the standup question that sits
+between `retro` (one session) and `weekly` (seven days).
+
+The same report is available to an agent — no CLI needed:
+
+```
+weekly_report { path: ".", days: 7 }
+```
+
 ### Close the loop: `treelog retro`
 
 ```bash
