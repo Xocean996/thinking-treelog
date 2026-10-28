@@ -1,5 +1,9 @@
 # Thinking TreeLog · 思维树
 
+[![CI](https://github.com/Xocean996/thinking-treelog/actions/workflows/ci.yml/badge.svg)](https://github.com/Xocean996/thinking-treelog/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)](#requirements)
+
 **Your AI session already contains the reasoning. This reads it back to you.**
 
 You talk to an AI for four hours. Somewhere in there the design got decided, a wrong
