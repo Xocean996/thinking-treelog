@@ -230,13 +230,17 @@ export function analyzeConversation(records) {
   // The title record can sit in an early frame; fall back to the first question.
   if (!title && userMessages.length) title = short(userMessages[0].text, 28);
 
+  // A log that predates turn markers (or a recorded demo) still has turns: one
+  // turn per question. Reporting "0 轮" next to ten messages is just wrong.
+  const effectiveTurns = turns || userMessages.length;
+
   return {
     id: (session && session.id) || '',
     cwd: (session && session.cwd) || '',
     title,
     startedAt: (session && session.createdAt) || null,
     lastAt,
-    turns,
+    turns: effectiveTurns,
     messages,
     userMessages,
     tools,

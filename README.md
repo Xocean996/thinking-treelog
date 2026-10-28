@@ -1,6 +1,9 @@
 # Thinking TreeLog · 思维树
 
 [![CI](https://github.com/Xocean996/thinking-treelog/actions/workflows/ci.yml/badge.svg)](https://github.com/Xocean996/thinking-treelog/actions/workflows/ci.yml)
+[![npm cli](https://img.shields.io/npm/v/@thinking-treelog/cli.svg?label=cli)](https://www.npmjs.com/package/@thinking-treelog/cli)
+[![npm core](https://img.shields.io/npm/v/@thinking-treelog/core.svg?label=core)](https://www.npmjs.com/package/@thinking-treelog/core)
+[![npm mcp](https://img.shields.io/npm/v/@thinking-treelog/mcp.svg?label=mcp)](https://www.npmjs.com/package/@thinking-treelog/mcp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)](#requirements)
 
@@ -13,23 +16,33 @@ the tab and all of it is gone — not the code, the *reasoning*.
 Thinking TreeLog reads the transcript you already have and gives you:
 
 ```
-$ npx @thinking-treelog/cli pulse
+$ npx -y @thinking-treelog/cli pulse --demo
 
-工作区脉络 · 我现在想要做一个 dsh 的插件
-  43 轮 · 79 条消息 · 340 次工具调用
+工作区脉络 · 给结算服务加一次重试
+  /demo/checkout-service
+  6 轮 · 10 条消息 · 13 次工具调用
   今天仍在推进
 
 在做什么（最近的提问）：
-   1. 我的意思是如果说你在这个工作区里面点击了这个插件…
-   2. 继续优化，同时优化树的风格以及 ui 画面…
-   3. 对于插件对于树结点的评论和评价可以丰富一点…
+   1. 支付回调偶尔丢，我想加重试。先看看现在是怎么处理的，别改任何东西。
+   2. QPS 200 时丢 0.3%，想 5 秒内重试 3 次。不要动下游幂等，验收：压测 1000 次零丢失…
+   3. 这个再优化一下
+   4. 跑一下压测，把 1000 次的失败数和 p99 都打出来。不通过就回滚。
+   5. 顺手把死信队列也接了吧，还有监控面板、告警规则，一并加上
 
 怎么在做：
-  edit×179  pwsh×75  read×37
+  edit×6  pwsh×4  read×2  grep×1
+
+还没做完：
+  ○ 压测 1000 次验证零丢失
+  ○ 补一条回归测试
 
 建议：
-  1. ［superpowers］ 把当前方向固化成一份计划
-     聊了很多轮却没有 todo，说明还在发散，没有可验收的任务。
+  1. ［superpowers］ 接着做完「压测 1000 次验证零丢失」
+     未完成的 todo 是唯一明确的下一步；别开新线。
+
+提问质量（最近 6 条，均值 53）：
+  ◐50 ●76 ○44 ◐68 ○32 ◐50
 ```
 
 Three things no other tool does together:
@@ -46,7 +59,7 @@ Three things no other tool does together:
 No dsh history? Run the recorded demo — it uses the same pipeline as a live read:
 
 ```bash
-npx @thinking-treelog/cli pulse --demo
+npx -y @thinking-treelog/cli pulse --demo
 ```
 
 ```
@@ -80,13 +93,13 @@ That gap is the whole point: the tool tells you which of your own questions wast
 With dsh history on the machine, drop `--demo`:
 
 ```bash
-npx @thinking-treelog/cli pulse
+npx -y @thinking-treelog/cli pulse
 ```
 
 Or read a repo instead of a conversation:
 
 ```bash
-npx @thinking-treelog/cli rhythm .
+npx -y @thinking-treelog/cli rhythm .
 ```
 
 ### Any transcript, not just dsh
@@ -634,28 +647,35 @@ Reload the page. A **思维树** icon appears in the sidebar; clicking it opens 
 
 ### 2. As an MCP server
 
+Published on npm — no checkout needed:
+
 ```jsonc
 // Claude Desktop / Claude Code / Cursor — any MCP client
 {
   "mcpServers": {
     "thinking-treelog": {
-      "command": "node",
-      "args": ["/absolute/path/to/packages/mcp/server.mjs"]
+      "command": "npx",
+      "args": ["-y", "@thinking-treelog/mcp"]
     }
   }
 }
 ```
 
-After publishing, this becomes `npx -y @thinking-treelog/mcp`.
+11 tools: thought trees, reasoning lint, plan lint, spec coverage, project rhythm,
+workspace pulse, and `weekly_report`.
 
 ### 3. As a CLI
 
 ```bash
-# from this repo
-node packages/cli/bin/treelog.mjs lint examples/adr-0007-plugin-vs-site.md
+npx -y @thinking-treelog/cli pulse --demo     # see it work, no setup
+npx -y @thinking-treelog/cli weekly .          # this week's report
+```
 
-# after publishing
-npx -y @thinking-treelog/cli lint docs/adr/*.md
+Or install it globally:
+
+```bash
+npm install -g @thinking-treelog/cli
+treelog pulse --demo
 ```
 
 ### 4. As a library

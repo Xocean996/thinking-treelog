@@ -10,7 +10,21 @@
  */
 
 const MINUTE = 60_000;
-const BASE = Date.UTC(2026, 9, 22, 9, 0, 0);
+
+/**
+ * Anchored to today, not to a fixed date.
+ *
+ * A hard-coded base made the demo read "last active 6 days ago" a week after it
+ * was written, which is the one thing a demo must not do. The session runs from
+ * this morning to a few minutes ago, so `pulse --demo` always shows a live day.
+ */
+const BASE = (() => {
+  const start = new Date();
+  start.setHours(9, 0, 0, 0);
+  // If it is before 09:00, start yesterday so the 52-minute session still fits.
+  if (Date.now() < start.getTime() + 60 * MINUTE) start.setDate(start.getDate() - 1);
+  return start.getTime();
+})();
 
 /** @param {number} minute */
 const at = (minute) => BASE + minute * MINUTE;
