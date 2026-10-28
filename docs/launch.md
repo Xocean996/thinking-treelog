@@ -40,10 +40,13 @@ GitHub 不能通过 API 设置社交预览图，只能网页操作：
 
 | 列表 | 提交位置 | 说明 |
 |---|---|---|
-| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | README 的 Servers 章节 | 改动最小、命中率最高，因为你有 11 个 MCP 工具 |
-| [awesome-ai-devtools](https://github.com/microsoft/awesome-ai-devtools) | Tools 章节 | 编辑器/CLI 类 AI 工具 |
-| [awesome-cli-apps](https://github.com/agarrharr/awesome-cli-apps) | Development 章节 | 纯 CLI 工具 |
-| [awesome-nodejs](https://github.com/sindresorhus/awesome-nodejs) | Packages 章节 | 门槛较高，star 数够再试 |
+| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | `Developer Tools` | 改动最小、命中率最高，因为你有 11 个 MCP 工具 |
+| [awesome-ai-devtools](https://github.com/jamesmurdza/awesome-ai-devtools) | `Terminal → CLI Utilities` | 格式宽松 |
+| [awesome-cli-apps](https://github.com/agarrharr/awesome-cli-apps) | `AI → Agents` | 条目必须一行，长了会被拒 |
+| ~~awesome-cli-coding-agents~~ | — | 不投：条目带 star 数，且定位是 agent 而非分析工具 |
+
+**每个列表的实际格式我都核实过**，可粘贴的条目和 PR 描述见
+[pr-three-awesome-lists.md](pr-three-awesome-lists.md)。
 
 **PR 格式（照这个写，别自夸）**：
 
