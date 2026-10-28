@@ -485,24 +485,24 @@ session log (`~/.dsh/sessions/<workspace>/<session>/session.v4.jsonl.zstd`) and 
 thread of work.
 
 ```
-工作区脉络 · 我现在想要做一个dsh'的插件
-  C:\Users\xuhai\Documents\deepseek-harness\default-workspace
-  35 轮 · 22 条消息 · 66 次工具调用
+工作区脉络 · 给结算服务加一次重试
+  C:\work\checkout-service
+  12 轮 · 9 条消息 · 31 次工具调用
   今天仍在推进
 
 在做什么（最近的提问）：
-   1. 我现在想要做一个dsh'的插件 要求极其具有创新性以及实用性…
-   2. 这一个太丑了 不遮挡项目的同时优化ui…
-   3. 不行，我的意思是这个插件可以直接梳理我当前正在做的项目的节奏
+   1. 支付回调偶尔丢，先看看现在怎么处理的，别改任何东西
+   2. QPS 200 时丢 0.3%，想 5 秒内重试 3 次，验收：压测 1000 次零丢失
+   3. 顺手把死信队列也接了吧
 
 怎么在做：
-  edit×35  pwsh×21  write×7  grep×1
+  edit×9  pwsh×4  read×2  grep×1
 
 还没做完：
-  ○ 补上入口守卫
+  ○ 补一条回归测试
 
 建议：
-  1. ［superpowers］ 接着做完「补上入口守卫」
+  1. ［superpowers］ 接着做完「补一条回归测试」
   2. ［treelog］ 给这段对话留一张决策树
 ```
 
@@ -581,11 +581,13 @@ reviewer sees "this decision has no evidence" on the PR that introduced it.
 
 ## Screenshots
 
-Paste a discussion, get a typed tree — node cards carry the type colour as a spine and a
-wash, links inherit the child's type, and the reasoning lint runs on the result:
+Not included. The panel runs inside a real workspace, and every screenshot of it
+shows the operator's session titles, working paths and conversation text — none of
+which belongs in a public repository. Run `treelog pulse --demo` or `treelog weekly`
+to see the command-line output, which is the same analysis without anyone's data.
 
-![Thought tree in the dsh panel](docs/screenshot-tree.png)
-
+Paste a discussion, get a typed tree: node cards carry the type colour as a spine and a
+wash, links inherit the child's type, and the reasoning lint runs on the result.
 A superpowers plan is recognised by its `### Task` structure; the panel switches to the
 plan rules and reports interface drift with line numbers (see the CLI output below).
 
