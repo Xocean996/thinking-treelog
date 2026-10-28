@@ -1,6 +1,6 @@
 {
     "name":  "@thinking-treelog/mcp",
-    "version":  "0.1.0",
+    "version": "0.1.2",
     "description":  "MCP server that turns conversations into navigable thought trees. Works with any MCP client.",
     "type":  "module",
     "license":  "MIT",
@@ -22,7 +22,7 @@
                   "tools.mjs"
               ],
     "dependencies":  {
-                         "@thinking-treelog/core":  "^0.1.0"
+                         "@thinking-treelog/core":  "^0.1.1"
                      },
     "engines":  {
                     "node":  "\u003e=18"

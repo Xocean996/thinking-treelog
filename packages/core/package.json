@@ -1,6 +1,6 @@
 {
     "name":  "@thinking-treelog/core",
-    "version":  "0.1.0",
+    "version": "0.1.1",
     "description":  "Extraction, normalisation, layout and rendering helpers for Thinking TreeLog thought trees.",
     "type":  "module",
     "license":  "MIT",

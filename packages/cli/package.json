@@ -1,6 +1,6 @@
 {
     "name":  "@thinking-treelog/cli",
-    "version":  "0.1.0",
+    "version": "0.1.1",
     "description":  "Lint design docs for reasoning gaps, and turn them into thought trees. CI-ready.",
     "type":  "module",
     "license":  "MIT",
@@ -23,7 +23,7 @@
                   "lib"
               ],
     "dependencies":  {
-                         "@thinking-treelog/core":  "^0.1.0"
+                         "@thinking-treelog/core":  "^0.1.1"
                      },
     "engines":  {
                     "node":  "\u003e=18"

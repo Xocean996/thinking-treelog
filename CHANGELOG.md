@@ -2,6 +2,36 @@
 
 Notable changes per release. The packages version independently but ship together.
 
+## 0.1.1 — the first version on npm
+
+`@thinking-treelog/core` 0.1.1 · `@thinking-treelog/cli` 0.1.1 ·
+`@thinking-treelog/mcp` 0.1.2
+
+### Fixed
+
+- **The CLI could not start on Node 18 or 20.** `workspace.js` imported
+  `zstdDecompressSync` by name from `node:zlib`, and that export only exists from
+  Node 22.15. A missing named export fails while the module graph loads, so every
+  command broke — including ones that never read a session log. It is a namespace
+  import with a lazy accessor now: only `pulse` needs zstd, and only `pulse` fails,
+  with a version message instead of a stack trace.
+- **`npm pack` for the MCP server left out `tools.mjs`**, so the published tarball
+  would have crashed on first run. `server.mjs` imports it.
+- **Importing the MCP package started a server.** `createInterface` and the process
+  handlers ran at module scope, hanging any tool that merely imported it. The loop
+  lives in `start()` and only runs when the file is the process entry point.
+- `pulse --demo` reported `0 轮` next to ten messages; a log without `turn/start`
+  records now counts one turn per question.
+- The demo transcript was anchored to a fixed date, so a week after release it read
+  "last active 6 days ago". It is anchored to today.
+
+### Changed
+
+- `treelog weekly` accepts several directories and reports per repo.
+- `treelog weekly --since-last-tag` reports by release instead of by calendar week,
+  falling back to the day window when no tag exists.
+- `weekly_report` MCP tool — the report no longer needs a terminal.
+
 ## Unreleased
 
 ### Added
